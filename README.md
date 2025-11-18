@@ -154,7 +154,7 @@ go test -cover
 - ✅ 340/340 specification fixtures passing
 - ✅ 196 decode fixtures
 - ✅ 144 encode fixtures
-- ✅ 65.4% code coverage
+- ✅ 80.5% code coverage
 
 ## Specification
 
