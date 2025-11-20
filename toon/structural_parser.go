@@ -679,42 +679,59 @@ func (sp *structuralParser) parseKeyValueLineWithQuoteInfo(line lineInfo, baseIn
 func (sp *structuralParser) parseArrayFromLine(line lineInfo, baseIndent int) (Value, error) {
 	p := newParser(line.content)
 
-	// Skip to opening bracket (handles both quoted and unquoted keys)
-	// Need to skip past quoted keys to avoid finding '[' inside quotes like "key[test]"[3]
-	if p.peek() == '"' {
-		// Skip past quoted key, handling escaped quotes and inner brackets
-		p.advance() // skip opening quote
-		for !p.isEOF() {
-			ch := p.peek()
-			if ch == '\\' {
-				// Skip escape sequence (both backslash and next char)
-				p.advance()
-				if !p.isEOF() {
-					p.advance()
-				}
-				continue
-			}
-			if ch == '"' {
-				p.advance() // skip closing quote
-				break
-			}
-			// Continue advancing even if we see brackets inside quotes
-			p.advance()
-		}
-	}
-
-	// Now skip to the array bracket
-	for p.peek() != '[' && !p.isEOF() {
-		p.advance()
-	}
+	// Skip to opening bracket, handling quoted keys
+	skipPastQuotedKey(p)
+	skipToArrayBracket(p)
 
 	if err := p.expect('['); err != nil {
 		return nil, err
 	}
 
-	// Parse length and delimiter marker together
-	lengthStr := ""
-	delimiter := ""
+	// Parse array header (length and delimiter)
+	lengthStr, delimiter := parseArrayLengthAndDelimiter(p)
+
+	if err := p.expect(']'); err != nil {
+		return nil, err
+	}
+
+	// Route to appropriate parser based on format
+	return sp.routeArrayParsing(p, line, baseIndent, lengthStr, delimiter)
+}
+
+// skipPastQuotedKey skips past a quoted key to avoid finding '[' inside quotes.
+func skipPastQuotedKey(p *parser) {
+	if p.peek() != '"' {
+		return
+	}
+
+	p.advance() // skip opening quote
+	for !p.isEOF() {
+		ch := p.peek()
+		if ch == '\\' {
+			// Skip escape sequence (both backslash and next char)
+			p.advance()
+			if !p.isEOF() {
+				p.advance()
+			}
+			continue
+		}
+		if ch == '"' {
+			p.advance() // skip closing quote
+			break
+		}
+		p.advance()
+	}
+}
+
+// skipToArrayBracket advances parser to the opening array bracket.
+func skipToArrayBracket(p *parser) {
+	for p.peek() != '[' && !p.isEOF() {
+		p.advance()
+	}
+}
+
+// parseArrayLengthAndDelimiter parses the length and delimiter marker from array header.
+func parseArrayLengthAndDelimiter(p *parser) (lengthStr, delimiter string) {
 	for p.peek() != ']' && !p.isEOF() {
 		ch := p.peek()
 		if ch >= '0' && ch <= '9' {
@@ -735,11 +752,11 @@ func (sp *structuralParser) parseArrayFromLine(line lineInfo, baseIndent int) (V
 			break
 		}
 	}
+	return lengthStr, delimiter
+}
 
-	if err := p.expect(']'); err != nil {
-		return nil, err
-	}
-
+// routeArrayParsing routes to the appropriate array parser based on format.
+func (sp *structuralParser) routeArrayParsing(p *parser, line lineInfo, baseIndent int, lengthStr, delimiter string) (Value, error) {
 	// Check for tabular format {keys}
 	if p.peek() == '{' {
 		return sp.parseTabularArray(line, baseIndent, lengthStr, delimiter)
@@ -1713,29 +1730,8 @@ func (sp *structuralParser) parseArray(p *parser, baseIndent int) (Value, error)
 		return nil, err
 	}
 
-	// Parse length and delimiter marker together
-	lengthStr := ""
-	delimiter := ""
-	for p.peek() != ']' && !p.isEOF() {
-		ch := p.peek()
-		if ch >= '0' && ch <= '9' {
-			lengthStr += string(ch)
-			p.advance()
-		} else if ch == '#' {
-			// Length marker prefix
-			p.advance()
-		} else if ch == '\t' {
-			delimiter = "\t"
-			lengthStr += string(ch)
-			p.advance()
-		} else if ch == '|' {
-			delimiter = "|"
-			lengthStr += string(ch)
-			p.advance()
-		} else {
-			break
-		}
-	}
+	// Parse array header (length and delimiter)
+	lengthStr, delimiter := parseArrayLengthAndDelimiter(p)
 
 	if err := p.expect(']'); err != nil {
 		return nil, err
@@ -1743,26 +1739,41 @@ func (sp *structuralParser) parseArray(p *parser, baseIndent int) (Value, error)
 
 	// Check for tabular format {keys}
 	if p.peek() == '{' {
-		p.advance() // skip {
-		headerStart := p.pos
-		for p.peek() != '}' && !p.isEOF() {
-			p.advance()
-		}
-		header := p.input[headerStart:p.pos]
-		p.advance() // skip }
-		keys := sp.parseHeader(header, delimiter)
-		if err := p.expect(':'); err != nil {
-			return nil, err
-		}
-		p.skipWhitespace()
-		if p.isEOF() || p.peek() == '\n' {
-			sp.pos++
-			return sp.parseTabularRows(baseIndent, lengthStr, delimiter, keys)
-		} else {
-			return nil, &DecodeError{Message: "tabular array must have rows on separate lines"}
-		}
+		return sp.parseTabularArrayFromParser(p, baseIndent, lengthStr, delimiter)
 	}
 
+	// Non-tabular array
+	return sp.parseNonTabularArrayFromParser(p, baseIndent, lengthStr, delimiter)
+}
+
+// parseTabularArrayFromParser handles tabular array parsing from a parser.
+func (sp *structuralParser) parseTabularArrayFromParser(p *parser, baseIndent int, lengthStr, delimiter string) (Value, error) {
+	p.advance() // skip {
+	headerStart := p.pos
+	for p.peek() != '}' && !p.isEOF() {
+		p.advance()
+	}
+	header := p.input[headerStart:p.pos]
+	p.advance() // skip }
+
+	keys := sp.parseHeader(header, delimiter)
+
+	if err := p.expect(':'); err != nil {
+		return nil, err
+	}
+
+	p.skipWhitespace()
+
+	if p.isEOF() || p.peek() == '\n' {
+		sp.pos++
+		return sp.parseTabularRows(baseIndent, lengthStr, delimiter, keys)
+	}
+
+	return nil, &DecodeError{Message: "tabular array must have rows on separate lines"}
+}
+
+// parseNonTabularArrayFromParser handles non-tabular array parsing from a parser.
+func (sp *structuralParser) parseNonTabularArrayFromParser(p *parser, baseIndent int, lengthStr, delimiter string) (Value, error) {
 	if err := p.expect(':'); err != nil {
 		return nil, err
 	}
