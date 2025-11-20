@@ -3,7 +3,6 @@ package toon
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"strings"
 )
 
@@ -96,7 +95,7 @@ func MarshalToString(v interface{}, opts ...EncodeOption) (string, error) {
 //	err := toon.Unmarshal(input, &result, WithStrictDecoding(false))
 func Unmarshal(r io.Reader, v interface{}, opts ...DecodeOption) error {
 	// Read from io.Reader
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}

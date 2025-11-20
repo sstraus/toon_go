@@ -63,13 +63,14 @@ func preprocessLines(input string) []lineInfo {
 func calculateIndent(line string) int {
 	count := 0
 	for _, ch := range line {
-		if ch == ' ' {
+		switch ch {
+		case ' ':
 			count++
-		} else if ch == '\t' {
+		case '\t':
 			// Tabs not allowed in indentation, but count for error detection
 			count += 4 // Treat tab as 4 spaces for counting
-		} else {
-			break
+		default:
+			return count
 		}
 	}
 	return count
