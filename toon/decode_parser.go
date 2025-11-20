@@ -489,27 +489,30 @@ func areValuesCompatible(v1, v2 Value) bool {
 		return false
 	}
 
-	// Check if both are maps
-	_, isMap1 := v1.(map[string]Value)
-	_, isMap2 := v2.(map[string]Value)
-	if isMap1 && isMap2 {
-		return true
-	}
+	// Check types are the same
+	type1 := getValueCategory(v1)
+	type2 := getValueCategory(v2)
+	return type1 == type2
+}
 
-	// Check if both are arrays
-	_, isArray1 := v1.([]Value)
-	_, isArray2 := v2.([]Value)
-	if isArray1 && isArray2 {
-		return true
-	}
+// valueCategory represents the category of a Value.
+type valueCategory int
 
-	// Different types - incompatible
-	if (isMap1 || isArray1) != (isMap2 || isArray2) {
-		return false
-	}
+const (
+	categoryPrimitive valueCategory = iota
+	categoryMap
+	categoryArray
+)
 
-	// Both primitives - compatible
-	return !isMap1 && !isArray1 && !isMap2 && !isArray2
+// getValueCategory returns the category of a Value.
+func getValueCategory(v Value) valueCategory {
+	if _, isMap := v.(map[string]Value); isMap {
+		return categoryMap
+	}
+	if _, isArray := v.([]Value); isArray {
+		return categoryArray
+	}
+	return categoryPrimitive
 }
 
 // isExpandablePath checks if a dotted path can be safely expanded.
@@ -532,19 +535,28 @@ func isValidIdentifier(s string) bool {
 	}
 
 	// First character: letter or underscore
-	first := rune(s[0])
-	if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_') {
+	if !isIdentifierStart(rune(s[0])) {
 		return false
 	}
 
 	// Remaining characters: letter, digit, or underscore
 	for _, ch := range s[1:] {
-		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
+		if !isIdentifierChar(ch) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// isIdentifierStart checks if a rune can start an identifier.
+func isIdentifierStart(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_'
+}
+
+// isIdentifierChar checks if a rune can be part of an identifier.
+func isIdentifierChar(r rune) bool {
+	return isIdentifierStart(r) || (r >= '0' && r <= '9')
 }
 
 // parseKeyValueLine parses a single key-value line.
@@ -1520,71 +1532,117 @@ func (sp *structuralParser) parseNestedUnderFirstKey(firstKey string, lines []li
 // parseRemainingListItemLines parses the remaining lines of a list item.
 func (sp *structuralParser) parseRemainingListItemLines(lines []lineInfo, startIdx, baseIndent int, firstKey string, result map[string]Value) error {
 	// Determine actual start index based on array notation check
-	i := startIdx
-	content := strings.TrimPrefix(lines[0].content, "-")
-	content = strings.TrimSpace(content)
-
-	if strings.Contains(content, "[") && strings.Contains(content, "]") && strings.Contains(content, ":") {
-		parts := strings.SplitN(content, ":", 2)
-		if len(parts) > 1 && strings.TrimSpace(parts[1]) == "" {
-			key := strings.TrimSpace(parts[0])
-			if !strings.HasSuffix(key, "[0]") {
-				i = 0
-			}
-		}
-	}
+	i := determineStartIndex(lines, startIdx)
 
 	for i < len(lines) {
-		line := lines[i]
-		if line.isBlank {
-			i++
-			continue
-		}
-
-		p := newParser(line.content)
-		key, err := p.parseKey()
+		nextIdx, err := sp.processListItemLine(lines, i, firstKey, result)
 		if err != nil {
-			i++
-			continue
+			return err
 		}
-
-		// Handle array
-		if p.peek() == '[' {
-			value, nextIdx, err := sp.parseNestedArray(lines, i, line.indent)
-			if err != nil {
-				i++
-				continue
-			}
-			result[key] = value
-			i = nextIdx
-			continue
-		}
-
-		if err := p.expect(':'); err != nil {
-			i++
-			continue
-		}
-
-		p.skipWhitespace()
-		remaining := p.input[p.pos:]
-
-		// Handle nested or inline value
-		if remaining == "" || strings.TrimSpace(remaining) == "" {
-			value, nextIdx, err := sp.parseNestedValue(lines, i, line.indent, key, firstKey)
-			if err != nil {
-				return err
-			}
-			result[key] = value
-			i = nextIdx
-		} else {
-			if value, err := parseValue(remaining); err == nil {
-				result[key] = value
-			}
-			i++
-		}
+		i = nextIdx
 	}
 
 	return nil
+}
+
+// determineStartIndex determines the actual start index for parsing list item lines.
+func determineStartIndex(lines []lineInfo, startIdx int) int {
+	content := strings.TrimPrefix(lines[0].content, "-")
+	content = strings.TrimSpace(content)
+
+	if !hasArrayNotation(content) {
+		return startIdx
+	}
+
+	parts := strings.SplitN(content, ":", 2)
+	if len(parts) > 1 && strings.TrimSpace(parts[1]) == "" {
+		key := strings.TrimSpace(parts[0])
+		if !strings.HasSuffix(key, "[0]") {
+			return 0
+		}
+	}
+
+	return startIdx
+}
+
+// hasArrayNotation checks if content contains array notation markers.
+func hasArrayNotation(content string) bool {
+	return strings.Contains(content, "[") && strings.Contains(content, "]") && strings.Contains(content, ":")
+}
+
+// processListItemLine processes a single line in a list item and returns the next index.
+func (sp *structuralParser) processListItemLine(lines []lineInfo, idx int, firstKey string, result map[string]Value) (int, error) {
+	line := lines[idx]
+
+	// Skip blank lines
+	if line.isBlank {
+		return idx + 1, nil
+	}
+
+	p := newParser(line.content)
+	key, err := p.parseKey()
+	if err != nil {
+		return idx + 1, nil // Skip line on error
+	}
+
+	// Handle array notation
+	if p.peek() == '[' {
+		return sp.handleArrayValue(lines, idx, key, result)
+	}
+
+	// Expect colon
+	if err := p.expect(':'); err != nil {
+		return idx + 1, nil // Skip line on error
+	}
+
+	return sp.handleValueAfterColon(lines, idx, p, key, firstKey, result)
+}
+
+// handleValueAfterColon handles the value part after a colon in a key-value pair.
+func (sp *structuralParser) handleValueAfterColon(lines []lineInfo, idx int, p *parser, key, firstKey string, result map[string]Value) (int, error) {
+	p.skipWhitespace()
+	remaining := p.input[p.pos:]
+
+	// Handle nested or inline value
+	if isEmptyOrWhitespace(remaining) {
+		return sp.handleNestedValue(lines, idx, lines[idx].indent, key, firstKey, result)
+	}
+
+	return sp.handleInlineValue(remaining, idx, key, result)
+}
+
+// isEmptyOrWhitespace checks if a string is empty or contains only whitespace.
+func isEmptyOrWhitespace(s string) bool {
+	return s == "" || strings.TrimSpace(s) == ""
+}
+
+// handleArrayValue processes an array value in a list item line.
+func (sp *structuralParser) handleArrayValue(lines []lineInfo, idx int, key string, result map[string]Value) (int, error) {
+	line := lines[idx]
+	value, nextIdx, err := sp.parseNestedArray(lines, idx, line.indent)
+	if err != nil {
+		return idx + 1, nil // Skip line on error
+	}
+	result[key] = value
+	return nextIdx, nil
+}
+
+// handleNestedValue processes a nested value in a list item line.
+func (sp *structuralParser) handleNestedValue(lines []lineInfo, idx, indent int, key, firstKey string, result map[string]Value) (int, error) {
+	value, nextIdx, err := sp.parseNestedValue(lines, idx, indent, key, firstKey)
+	if err != nil {
+		return 0, err
+	}
+	result[key] = value
+	return nextIdx, nil
+}
+
+// handleInlineValue processes an inline value in a list item line.
+func (sp *structuralParser) handleInlineValue(remaining string, idx int, key string, result map[string]Value) (int, error) {
+	if value, err := parseValue(remaining); err == nil {
+		result[key] = value
+	}
+	return idx + 1, nil
 }
 
 // parseNestedArray parses a nested array within list item lines.

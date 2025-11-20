@@ -98,45 +98,51 @@ func needsQuoting(s string, delimiter string) bool {
 		return true
 	}
 
-	// Check for leading or trailing spaces
-	if strings.HasPrefix(s, space) || strings.HasSuffix(s, space) {
-		return true
+	checks := []func() bool{
+		func() bool { return hasLeadingTrailingSpaces(s) },
+		func() bool { return isReservedLiteral(s) },
+		func() bool { return looksLikeNumber(s) },
+		func() bool { return containsStructureChars(s) },
+		func() bool { return strings.Contains(s, delimiter) },
+		func() bool { return containsControlChars(s) },
+		func() bool { return strings.HasPrefix(s, "-") },
 	}
 
-	// Check if it's a literal
-	if s == trueLiteral || s == falseLiteral || s == nullLiteral {
-		return true
+	for _, check := range checks {
+		if check() {
+			return true
+		}
 	}
+	return false
+}
 
-	// Check if it looks like a number
-	if looksLikeNumber(s) {
-		return true
-	}
+// hasLeadingTrailingSpaces checks if string has leading or trailing spaces.
+func hasLeadingTrailingSpaces(s string) bool {
+	return strings.HasPrefix(s, space) || strings.HasSuffix(s, space)
+}
 
-	// Check for structure characters
+// isReservedLiteral checks if string is a reserved literal (true, false, null).
+func isReservedLiteral(s string) bool {
+	return s == trueLiteral || s == falseLiteral || s == nullLiteral
+}
+
+// containsStructureChars checks if string contains TOON structure characters.
+func containsStructureChars(s string) bool {
 	for _, char := range structureChars {
 		if strings.Contains(s, char) {
 			return true
 		}
 	}
+	return false
+}
 
-	// Check for active delimiter
-	if strings.Contains(s, delimiter) {
-		return true
-	}
-
-	// Check for control characters
+// containsControlChars checks if string contains control characters.
+func containsControlChars(s string) bool {
 	for _, char := range controlChars {
 		if strings.Contains(s, char) {
 			return true
 		}
 	}
-
-	// Check if starts with hyphen
-	if strings.HasPrefix(s, "-") {
-		return true
-	}
-
 	return false
 }
 
