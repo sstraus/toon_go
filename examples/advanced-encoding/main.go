@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Advanced TOON Encoding Examples ===\n")
+	fmt.Println("=== Advanced TOON Encoding Examples ===")
 
 	// Example 1: Inline Array Format (primitives)
 	fmt.Println("1. Inline Array Format (primitives):")

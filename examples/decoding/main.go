@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== TOON Decoding Examples ===\n")
+	fmt.Println("=== TOON Decoding Examples ===")
 
 	// Example 1: Simple Object Decoding
 	fmt.Println("1. Decoding Simple Object:")

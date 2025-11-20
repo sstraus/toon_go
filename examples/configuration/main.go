@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Configuration File Examples ===\n")
+	fmt.Println("=== Configuration File Examples ===")
 
 	// Example 1: Read Application Configuration
 	fmt.Println("1. Reading Application Configuration:")

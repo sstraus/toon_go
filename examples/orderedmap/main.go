@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== OrderedMap Examples ===\n")
+	fmt.Println("=== OrderedMap Examples ===")
 
 	// Example 1: Basic OrderedMap Usage
 	fmt.Println("1. Basic OrderedMap (preserves insertion order):")

@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== API Response Examples (TOON for LLM-friendly APIs) ===\n")
+	fmt.Println("=== API Response Examples (TOON for LLM-friendly APIs) ===")
 
 	// Example 1: User Profile API Response
 	fmt.Println("1. User Profile API Response:")
