@@ -52,14 +52,14 @@ func TestUnmarshalSimplePrimitive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var result interface{}
-			err := Unmarshal([]byte(tt.input), &result, nil)
+			err := unmarshalFromBytes([]byte(tt.input), &result, nil)
 			if err != nil {
-				t.Fatalf("Unmarshal() error = %v", err)
+				t.Fatalf("unmarshalFromBytes() error = %v", err)
 			}
 
 			// Compare values
 			if !valuesEqual(result, tt.expected) {
-				t.Errorf("Unmarshal() = %v (%T), want %v (%T)", result, result, tt.expected, tt.expected)
+				t.Errorf("unmarshalFromBytes() = %v (%T), want %v (%T)", result, result, tt.expected, tt.expected)
 			}
 		})
 	}
@@ -69,9 +69,9 @@ func TestUnmarshalSimpleObject(t *testing.T) {
 	input := "name: Alice\nage: 30"
 
 	var result map[string]interface{}
-	err := Unmarshal([]byte(input), &result, nil)
+	err := unmarshalFromBytes([]byte(input), &result, nil)
 	if err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
+		t.Fatalf("unmarshalFromBytes() error = %v", err)
 	}
 
 	if result["name"] != "Alice" {
@@ -86,9 +86,9 @@ func TestUnmarshalInlineArray(t *testing.T) {
 	input := "tags[2]: go,toon"
 
 	var result map[string]interface{}
-	err := Unmarshal([]byte(input), &result, nil)
+	err := unmarshalFromBytes([]byte(input), &result, nil)
 	if err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
+		t.Fatalf("unmarshalFromBytes() error = %v", err)
 	}
 
 	tags, ok := result["tags"].([]Value)
@@ -111,9 +111,9 @@ func TestUnmarshalNestedObject(t *testing.T) {
 	input := "user:\n  name: Bob"
 
 	var result map[string]interface{}
-	err := Unmarshal([]byte(input), &result, nil)
+	err := unmarshalFromBytes([]byte(input), &result, nil)
 	if err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
+		t.Fatalf("unmarshalFromBytes() error = %v", err)
 	}
 
 	user, ok := result["user"].(map[string]Value)
@@ -130,9 +130,9 @@ func TestUnmarshalTabularArray(t *testing.T) {
 	input := "users[2]{age,name}:\n  30,Alice\n  25,Bob"
 
 	var result map[string]interface{}
-	err := Unmarshal([]byte(input), &result, nil)
+	err := unmarshalFromBytes([]byte(input), &result, nil)
 	if err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
+		t.Fatalf("unmarshalFromBytes() error = %v", err)
 	}
 
 	users, ok := result["users"].([]Value)
@@ -188,16 +188,16 @@ func TestRoundTrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Encode
-			encoded, err := Marshal(tt.data, nil)
+			encoded, err := marshalToBytes(tt.data, nil)
 			if err != nil {
-				t.Fatalf("Marshal() error = %v", err)
+				t.Fatalf("marshalToBytes() error = %v", err)
 			}
 
 			// Decode
 			var result interface{}
-			err = Unmarshal(encoded, &result, nil)
+			err = unmarshalFromBytes(encoded, &result, nil)
 			if err != nil {
-				t.Fatalf("Unmarshal() error = %v", err)
+				t.Fatalf("unmarshalFromBytes() error = %v", err)
 			}
 
 			// Compare (basic comparison, not deep)
@@ -278,12 +278,12 @@ func TestDecodeFixtures(t *testing.T) {
 
 						// Decode the input
 						var result interface{}
-						err := Unmarshal([]byte(inputStr), &result, opts)
+						err := unmarshalFromBytes([]byte(inputStr), &result, opts)
 
 						// Handle shouldError tests
 						if test.ShouldError {
 							if err == nil {
-								t.Errorf("Unmarshal() expected error but got none\nSpec Section: %s\nInput: %q\nGot: %#v\nNote: %s",
+								t.Errorf("unmarshalFromBytes() expected error but got none\nSpec Section: %s\nInput: %q\nGot: %#v\nNote: %s",
 									test.SpecSection, inputStr, result, test.Note)
 								return
 							}
@@ -294,7 +294,7 @@ func TestDecodeFixtures(t *testing.T) {
 
 						// Non-error test cases
 						if err != nil {
-							t.Errorf("Unmarshal() error = %v\nSpec Section: %s\nInput: %q\nNote: %s",
+							t.Errorf("unmarshalFromBytes() error = %v\nSpec Section: %s\nInput: %q\nNote: %s",
 								err, test.SpecSection, inputStr, test.Note)
 							return
 						}
@@ -305,7 +305,7 @@ func TestDecodeFixtures(t *testing.T) {
 
 						// Compare decoded result with expected
 						if !deepEqual(resultNorm, expectedNorm) {
-							t.Errorf("Unmarshal() mismatch\nSpec Section: %s\nInput: %q\nExpected: %#v\nGot: %#v\nNote: %s",
+							t.Errorf("unmarshalFromBytes() mismatch\nSpec Section: %s\nInput: %q\nExpected: %#v\nGot: %#v\nNote: %s",
 								test.SpecSection, inputStr, expectedNorm, resultNorm, test.Note)
 						} else {
 							passedTests++

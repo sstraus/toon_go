@@ -75,26 +75,42 @@ go get github.com/sstraus/toon_go/toon@latest
 package main
 
 import (
+    "bytes"
     "fmt"
+    "strings"
     "github.com/sstraus/toon_go/toon"
 )
 
 func main() {
-    // Simple object
+    // Encoding: Simple object
     data := map[string]interface{}{
         "name": "Alice",
         "age":  30,
     }
-    
-    encoded, err := toon.Marshal(data, nil)
+
+    var buf bytes.Buffer
+    err := toon.Marshal(data, &buf, nil)
     if err != nil {
         panic(err)
     }
 
-    fmt.Println(string(encoded))
+    fmt.Println(buf.String())
     // Output:
     // age: 30
     // name: Alice
+
+    // Decoding: Read from io.Reader
+    input := `name: Bob
+age: 25`
+
+    var result map[string]interface{}
+    err = toon.Unmarshal(strings.NewReader(input), &result, nil)
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Printf("%+v\n", result)
+    // Output: map[age:25 name:Bob]
 }
 ```
 
@@ -105,8 +121,10 @@ func main() {
 data := map[string]interface{}{
     "tags": []interface{}{"go", "toon", "llm"},
 }
-encoded, _ := toon.Marshal(data, nil)
-fmt.Println(string(encoded))
+
+var buf bytes.Buffer
+toon.Marshal(data, &buf, nil)
+fmt.Println(buf.String())
 // Output: tags[3]: go,toon,llm
 
 // Tabular array (uniform objects)
@@ -116,8 +134,10 @@ users := map[string]interface{}{
         map[string]interface{}{"name": "Bob", "age": 25},
     },
 }
-encoded, _ := toon.Marshal(users, nil)
-fmt.Println(string(encoded))
+
+buf.Reset()
+toon.Marshal(users, &buf, nil)
+fmt.Println(buf.String())
 // Output:
 // users[2]{age,name}:
 //   30,Alice
@@ -137,8 +157,9 @@ data := map[string]interface{}{
     "values": []interface{}{1, 2, 3},
 }
 
-encoded, _ := toon.Marshal(data, opts)
-fmt.Println(string(encoded))
+var buf bytes.Buffer
+toon.Marshal(data, &buf, opts)
+fmt.Println(buf.String())
 // Output: values[#3	]: 1	2	3
 ```
 
@@ -146,24 +167,29 @@ fmt.Println(string(encoded))
 
 ```
 toon/
-├── toon.go              # Public API (Marshal/Unmarshal)
-├── encode.go            # Encoder implementation
-├── decode.go            # Decoder implementation
-├── structural_parser.go # Structural/indentation-based parser
-├── parser.go            # Token parser
+├── doc.go               # Package documentation
+├── api.go               # Public API (Marshal/Unmarshal)
 ├── types.go             # Type definitions
-├── constants.go         # Format constants
 ├── errors.go            # Error types
-├── primitives.go        # Primitive encoding/decoding
-├── strings.go           # String utilities
-├── arrays.go            # Array format logic
-├── objects.go           # Object encoding
 ├── orderedmap.go        # Ordered map implementation
-├── writer.go            # Output writer
+│
+├── encode.go            # Encoding entry point
+├── encode_objects.go    # Object encoding
+├── encode_arrays.go     # Array format logic
+├── encode_primitives.go # Primitive encoding
+│
+├── decode.go            # Decoding entry point
+├── decode_parser.go     # Structural/indentation-based parser
+├── decode_tokens.go     # Token parser
+│
 ├── options.go           # Option types
+├── writer.go            # Output writer
 ├── utils.go             # Utilities
+├── constants.go         # Format constants
+│
 ├── toon_test.go         # Encoder tests
-└── decode_test.go       # Decoder tests
+├── decode_test.go       # Decoder tests
+└── *_test.go            # Additional test files
 ```
 
 ## Testing

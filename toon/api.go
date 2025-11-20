@@ -1,48 +1,14 @@
-// Package toon implements encoding and decoding of TOON (Token-Oriented Object Notation) format.
-//
-// TOON is a compact data format optimized for LLM token efficiency, achieving
-// 30-60% token reduction compared to JSON while maintaining readability.
-//
-// Features:
-//   - Token Efficient: 30-60% fewer tokens than JSON
-//   - Human Readable: Indentation-based structure like YAML
-//   - Three Array Formats: Inline, tabular, and list formats
-//   - Type Safe: Strong typing with clear interfaces
-//
-// Author: Stefano Straus (https://github.com/sstraus)
-// Copyright (c) 2025 Stefano Straus
-//
-// Basic usage:
-//
-//	// Encoding
-//	data := map[string]interface{}{
-//		"name": "Alice",
-//		"age":  30,
-//	}
-//	encoded, err := toon.Marshal(data, nil)
-//	if err != nil {
-//		log.Fatal(err)
-//	}
-//	fmt.Println(string(encoded))
-//	// Output: age: 30
-//	//         name: Alice
-//
-//	// Decoding
-//	input := `name: Alice
-//	age: 30`
-//	var result map[string]interface{}
-//	err = toon.Unmarshal([]byte(input), &result, nil)
-//	if err != nil {
-//		log.Fatal(err)
-//	}
-//	fmt.Printf("%+v\n", result)
-//	// Output: map[age:30 name:Alice]
 package toon
 
-// Version is the current version of the TOON library.
-const Version = "1.0.0"
+import (
+	"io"
+	"io/ioutil"
+)
 
-// Marshal encodes a Go value to TOON format.
+// Version is the current version of the TOON library.
+const Version = "1.1.0"
+
+// Marshal encodes a Go value to TOON format and writes it to w.
 //
 // The value v can be any JSON-compatible type: nil, bool, int, int64, float64,
 // string, []interface{}, or map[string]interface{}.
@@ -54,13 +20,14 @@ const Version = "1.0.0"
 //	data := map[string]interface{}{
 //		"tags": []interface{}{"go", "toon"},
 //	}
-//	encoded, err := toon.Marshal(data, nil)
-//	// Output: tags[2]: go,toon
-func Marshal(v interface{}, opts *EncodeOptions) ([]byte, error) {
+//	var buf bytes.Buffer
+//	err := toon.Marshal(data, &buf, nil)
+//	// buf contains: tags[2]: go,toon
+func Marshal(v interface{}, w io.Writer, opts *EncodeOptions) error {
 	// Validate options
 	opts = getEncodeOptions(opts)
 	if err := validateEncodeOptions(opts); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Normalize the value
@@ -69,13 +36,15 @@ func Marshal(v interface{}, opts *EncodeOptions) ([]byte, error) {
 	// Encode
 	result, err := encode(normalized, opts)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return []byte(result), nil
+	// Write to io.Writer
+	_, err = w.Write([]byte(result))
+	return err
 }
 
-// Unmarshal decodes TOON format data into a Go value.
+// Unmarshal decodes TOON format data from r into a Go value.
 //
 // The value pointed to by v will be populated with the decoded data.
 // v must be a pointer to a value of the appropriate type.
@@ -84,11 +53,17 @@ func Marshal(v interface{}, opts *EncodeOptions) ([]byte, error) {
 //
 // Example:
 //
-//	input := []byte("name: Alice\nage: 30")
+//	input := strings.NewReader("name: Alice\nage: 30")
 //	var result map[string]interface{}
 //	err := toon.Unmarshal(input, &result, nil)
 //	// result: map[string]interface{}{"name": "Alice", "age": 30}
-func Unmarshal(data []byte, v interface{}, opts *DecodeOptions) error {
+func Unmarshal(r io.Reader, v interface{}, opts *DecodeOptions) error {
+	// Read from io.Reader
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	}
+
 	// Validate options
 	opts = getDecodeOptions(opts)
 	if err := validateDecodeOptions(opts); err != nil {

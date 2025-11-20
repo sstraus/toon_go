@@ -188,13 +188,13 @@ func TestEncodeListItemComplexNestedArrays(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := Marshal(tt.input, nil)
+			result, err := marshalToBytes(tt.input, nil)
 			if err != nil {
-				t.Fatalf("Marshal() error = %v", err)
+				t.Fatalf("marshalToBytes() error = %v", err)
 			}
 			got := string(result)
 			if got != tt.expected {
-				t.Errorf("Marshal() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
+				t.Errorf("marshalToBytes() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
 			}
 		})
 	}
@@ -238,13 +238,13 @@ func TestEncodeListItemDelimiterHandling(t *testing.T) {
 			opts := &EncodeOptions{
 				Delimiter: tt.delimiter,
 			}
-			result, err := Marshal(tt.input, opts)
+			result, err := marshalToBytes(tt.input, opts)
 			if err != nil {
-				t.Fatalf("Marshal() error = %v", err)
+				t.Fatalf("marshalToBytes() error = %v", err)
 			}
 			got := string(result)
 			if got != tt.expected {
-				t.Errorf("Marshal() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
+				t.Errorf("marshalToBytes() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
 			}
 		})
 	}
@@ -296,13 +296,13 @@ func TestEncodeListItemNullEncoding(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := Marshal(tt.input, nil)
+			result, err := marshalToBytes(tt.input, nil)
 			if err != nil {
-				t.Fatalf("Marshal() unexpected error = %v", err)
+				t.Fatalf("marshalToBytes() unexpected error = %v", err)
 			}
 			got := string(result)
 			if got != tt.expected {
-				t.Errorf("Marshal() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
+				t.Errorf("marshalToBytes() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
 			}
 		})
 	}
@@ -374,13 +374,13 @@ func TestEncodeListItemEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := Marshal(tt.input, nil)
+			result, err := marshalToBytes(tt.input, nil)
 			if err != nil {
-				t.Fatalf("Marshal() error = %v", err)
+				t.Fatalf("marshalToBytes() error = %v", err)
 			}
 			got := string(result)
 			if got != tt.expected {
-				t.Errorf("Marshal() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
+				t.Errorf("marshalToBytes() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
 			}
 		})
 	}
@@ -431,13 +431,13 @@ func TestEncodeListItemRootLevelArrays(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := Marshal(tt.input, nil)
+			result, err := marshalToBytes(tt.input, nil)
 			if err != nil {
-				t.Fatalf("Marshal() error = %v", err)
+				t.Fatalf("marshalToBytes() error = %v", err)
 			}
 			got := string(result)
 			if got != tt.expected {
-				t.Errorf("Marshal() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
+				t.Errorf("marshalToBytes() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
 			}
 		})
 	}
@@ -498,13 +498,13 @@ func TestEncodeListItemWithCustomOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := Marshal(tt.input, tt.opts)
+			result, err := marshalToBytes(tt.input, tt.opts)
 			if err != nil {
-				t.Fatalf("Marshal() error = %v", err)
+				t.Fatalf("marshalToBytes() error = %v", err)
 			}
 			got := string(result)
 			if got != tt.expected {
-				t.Errorf("Marshal() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
+				t.Errorf("marshalToBytes() output mismatch:\nGot:\n%s\n\nWant:\n%s", got, tt.expected)
 			}
 		})
 	}

@@ -51,12 +51,12 @@ func TestMarshalSimplePrimitive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := Marshal(tt.input, nil)
+			result, err := marshalToBytes(tt.input, nil)
 			if err != nil {
-				t.Fatalf("Marshal() error = %v", err)
+				t.Fatalf("marshalToBytes() error = %v", err)
 			}
 			if string(result) != tt.expected {
-				t.Errorf("Marshal() = %q, want %q", string(result), tt.expected)
+				t.Errorf("marshalToBytes() = %q, want %q", string(result), tt.expected)
 			}
 		})
 	}
@@ -68,14 +68,14 @@ func TestMarshalSimpleObject(t *testing.T) {
 		"age":  30,
 	}
 
-	result, err := Marshal(input, nil)
+	result, err := marshalToBytes(input, nil)
 	if err != nil {
-		t.Fatalf("Marshal() error = %v", err)
+		t.Fatalf("marshalToBytes() error = %v", err)
 	}
 
 	expected := "age: 30\nname: Alice"
 	if string(result) != expected {
-		t.Errorf("Marshal() = %q, want %q", string(result), expected)
+		t.Errorf("marshalToBytes() = %q, want %q", string(result), expected)
 	}
 }
 
@@ -84,14 +84,14 @@ func TestMarshalInlineArray(t *testing.T) {
 		"tags": []interface{}{"go", "toon"},
 	}
 
-	result, err := Marshal(input, nil)
+	result, err := marshalToBytes(input, nil)
 	if err != nil {
-		t.Fatalf("Marshal() error = %v", err)
+		t.Fatalf("marshalToBytes() error = %v", err)
 	}
 
 	expected := "tags[2]: go,toon"
 	if string(result) != expected {
-		t.Errorf("Marshal() = %q, want %q", string(result), expected)
+		t.Errorf("marshalToBytes() = %q, want %q", string(result), expected)
 	}
 }
 
@@ -102,14 +102,14 @@ func TestMarshalNestedObject(t *testing.T) {
 		},
 	}
 
-	result, err := Marshal(input, nil)
+	result, err := marshalToBytes(input, nil)
 	if err != nil {
-		t.Fatalf("Marshal() error = %v", err)
+		t.Fatalf("marshalToBytes() error = %v", err)
 	}
 
 	expected := "user:\n  name: Bob"
 	if string(result) != expected {
-		t.Errorf("Marshal() = %q, want %q", string(result), expected)
+		t.Errorf("marshalToBytes() = %q, want %q", string(result), expected)
 	}
 }
 
@@ -121,15 +121,15 @@ func TestMarshalTabularArray(t *testing.T) {
 		},
 	}
 
-	result, err := Marshal(input, nil)
+	result, err := marshalToBytes(input, nil)
 	if err != nil {
-		t.Fatalf("Marshal() error = %v", err)
+		t.Fatalf("marshalToBytes() error = %v", err)
 	}
 
 	// Keys should be sorted: age, name
 	expected := "users[2]{age,name}:\n  30,Alice\n  25,Bob"
 	if string(result) != expected {
-		t.Errorf("Marshal() = %q, want %q", string(result), expected)
+		t.Errorf("marshalToBytes() = %q, want %q", string(result), expected)
 	}
 }
 
@@ -143,14 +143,14 @@ func TestMarshalWithOptions(t *testing.T) {
 		LengthMarker: "#",
 	}
 
-	result, err := Marshal(input, opts)
+	result, err := marshalToBytes(input, opts)
 	if err != nil {
-		t.Fatalf("Marshal() error = %v", err)
+		t.Fatalf("marshalToBytes() error = %v", err)
 	}
 
 	expected := "tags[#3\t]: a\tb\tc"
 	if string(result) != expected {
-		t.Errorf("Marshal() = %q, want %q", string(result), expected)
+		t.Errorf("marshalToBytes() = %q, want %q", string(result), expected)
 	}
 }
 
@@ -159,14 +159,14 @@ func TestMarshalEmptyArray(t *testing.T) {
 		"items": []interface{}{},
 	}
 
-	result, err := Marshal(input, nil)
+	result, err := marshalToBytes(input, nil)
 	if err != nil {
-		t.Fatalf("Marshal() error = %v", err)
+		t.Fatalf("marshalToBytes() error = %v", err)
 	}
 
 	expected := "items[0]:"
 	if string(result) != expected {
-		t.Errorf("Marshal() = %q, want %q", string(result), expected)
+		t.Errorf("marshalToBytes() = %q, want %q", string(result), expected)
 	}
 }
 
@@ -201,9 +201,9 @@ func TestEncodeFixtures(t *testing.T) {
 						opts := fixtureOptionsToEncodeOptions(test.Options)
 
 						// Encode the input
-						encoded, err := Marshal(test.Input, opts)
+						encoded, err := marshalToBytes(test.Input, opts)
 						if err != nil {
-							t.Errorf("Marshal() error = %v", err)
+							t.Errorf("marshalToBytes() error = %v", err)
 							return
 						}
 
@@ -214,8 +214,8 @@ func TestEncodeFixtures(t *testing.T) {
 						var encodedResult interface{}
 						var expectedResult interface{}
 
-						decodeErr1 := Unmarshal([]byte(encodedStr), &encodedResult, nil)
-						decodeErr2 := Unmarshal([]byte(expectedStr), &expectedResult, nil)
+						decodeErr1 := unmarshalFromBytes([]byte(encodedStr), &encodedResult, nil)
+						decodeErr2 := unmarshalFromBytes([]byte(expectedStr), &expectedResult, nil)
 
 						if decodeErr1 == nil && decodeErr2 == nil {
 							// Compare decoded structures for semantic equivalence
@@ -230,7 +230,7 @@ func TestEncodeFixtures(t *testing.T) {
 
 						// If semantic comparison fails or decode errors, do string comparison
 						if encodedStr != expectedStr {
-							t.Errorf("Marshal() mismatch\nSpec Section: %s\nInput: %#v\nExpected: %q\nGot: %q\nNote: %s",
+							t.Errorf("marshalToBytes() mismatch\nSpec Section: %s\nInput: %#v\nExpected: %q\nGot: %q\nNote: %s",
 								test.SpecSection, test.Input, expectedStr, encodedStr, test.Note)
 						} else {
 							passedTests++
@@ -311,7 +311,7 @@ func TestAssignResultMapTarget(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var result map[string]interface{}
-			err := Unmarshal([]byte(tt.input), &result, nil)
+			err := unmarshalFromBytes([]byte(tt.input), &result, nil)
 
 			if tt.wantErr {
 				if err == nil {
@@ -341,7 +341,7 @@ func TestAssignResultArrayTarget(t *testing.T) {
 	t.Run("map result to array target should error", func(t *testing.T) {
 		input := "name: Alice"
 		var result []interface{}
-		err := Unmarshal([]byte(input), &result, nil)
+		err := unmarshalFromBytes([]byte(input), &result, nil)
 
 		if err == nil {
 			t.Fatal("expected error, got nil")
@@ -354,7 +354,7 @@ func TestAssignResultArrayTarget(t *testing.T) {
 	t.Run("map with array to array target should error", func(t *testing.T) {
 		input := "tags[2]: go,toon"
 		var result []interface{}
-		err := Unmarshal([]byte(input), &result, nil)
+		err := unmarshalFromBytes([]byte(input), &result, nil)
 
 		if err == nil {
 			t.Fatal("expected error, got nil")
@@ -472,7 +472,7 @@ func TestAssignResultInterfaceTarget(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var result interface{}
-			err := Unmarshal([]byte(tt.input), &result, nil)
+			err := unmarshalFromBytes([]byte(tt.input), &result, nil)
 
 			if tt.wantErr {
 				if err == nil {
@@ -534,7 +534,7 @@ func TestAssignResultUnsupportedTarget(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Unmarshal([]byte(tt.input), tt.target, nil)
+			err := unmarshalFromBytes([]byte(tt.input), tt.target, nil)
 
 			if err == nil {
 				t.Fatal("expected error, got nil")
@@ -558,7 +558,7 @@ metadata:
 
 	t.Run("complex to map", func(t *testing.T) {
 		var result map[string]interface{}
-		err := Unmarshal([]byte(input), &result, &DecodeOptions{Strict: false})
+		err := unmarshalFromBytes([]byte(input), &result, &DecodeOptions{Strict: false})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -585,7 +585,7 @@ metadata:
 
 	t.Run("complex to interface{}", func(t *testing.T) {
 		var result interface{}
-		err := Unmarshal([]byte(input), &result, &DecodeOptions{Strict: false})
+		err := unmarshalFromBytes([]byte(input), &result, &DecodeOptions{Strict: false})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -608,7 +608,7 @@ metadata:
 func TestAssignResultEmptyAndNil(t *testing.T) {
 	t.Run("empty input to map", func(t *testing.T) {
 		var result map[string]interface{}
-		err := Unmarshal([]byte(""), &result, nil)
+		err := unmarshalFromBytes([]byte(""), &result, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -619,7 +619,7 @@ func TestAssignResultEmptyAndNil(t *testing.T) {
 
 	t.Run("empty input to interface{}", func(t *testing.T) {
 		var result interface{}
-		err := Unmarshal([]byte(""), &result, nil)
+		err := unmarshalFromBytes([]byte(""), &result, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -634,7 +634,7 @@ func TestAssignResultEmptyAndNil(t *testing.T) {
 
 	t.Run("null value to interface{}", func(t *testing.T) {
 		var result interface{}
-		err := Unmarshal([]byte("null"), &result, nil)
+		err := unmarshalFromBytes([]byte("null"), &result, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
