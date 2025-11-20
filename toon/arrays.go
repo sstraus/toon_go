@@ -39,58 +39,69 @@ func detectArrayFormat(v Value) arrayFormat {
 		return arrayFormatEmpty
 	}
 
-	// Check if all elements are primitives
 	if allPrimitives(v) {
 		return arrayFormatInline
 	}
 
-	// Check if all elements are maps with same keys and all primitive values
-	if allMaps(v) && sameKeys(v) {
-		// Check if all values in all maps are primitives
-		allPrim := true
-		for i := 0; i < length; i++ {
-			item := rv.Index(i).Interface()
-
-			// Handle OrderedMap vs regular map
-			if orderedMap, ok := item.(OrderedMap); ok {
-				for _, k := range orderedMap.Keys() {
-					val, _ := orderedMap.Get(k)
-					if !isPrimitive(val) {
-						allPrim = false
-						break
-					}
-				}
-			} else if orderedMapPtr, ok := item.(*OrderedMap); ok {
-				for _, k := range orderedMapPtr.Keys() {
-					val, _ := orderedMapPtr.Get(k)
-					if !isPrimitive(val) {
-						allPrim = false
-						break
-					}
-				}
-			} else {
-				itemRv := reflect.ValueOf(item)
-				if itemRv.Kind() == reflect.Map {
-					for _, k := range itemRv.MapKeys() {
-						val := itemRv.MapIndex(k).Interface()
-						if !isPrimitive(val) {
-							allPrim = false
-							break
-						}
-					}
-				}
-			}
-			if !allPrim {
-				break
-			}
-		}
-		if allPrim {
-			return arrayFormatTabular
-		}
+	if allMaps(v) && sameKeys(v) && allMapValuesPrimitive(v) {
+		return arrayFormatTabular
 	}
 
-	// Otherwise use list format
 	return arrayFormatList
+}
+
+// allMapValuesPrimitive checks if all values in all maps in the array are primitives.
+func allMapValuesPrimitive(v Value) bool {
+	rv := reflect.ValueOf(v)
+	length := rv.Len()
+
+	for i := 0; i < length; i++ {
+		item := rv.Index(i).Interface()
+		if !mapHasPrimitiveValues(item) {
+			return false
+		}
+	}
+	return true
+}
+
+// mapHasPrimitiveValues checks if all values in a single map are primitives.
+func mapHasPrimitiveValues(item Value) bool {
+	if orderedMap, ok := item.(OrderedMap); ok {
+		return orderedMapHasPrimitiveValues(&orderedMap)
+	}
+
+	if orderedMapPtr, ok := item.(*OrderedMap); ok {
+		return orderedMapHasPrimitiveValues(orderedMapPtr)
+	}
+
+	return reflectMapHasPrimitiveValues(item)
+}
+
+// orderedMapHasPrimitiveValues checks if all values in an OrderedMap are primitives.
+func orderedMapHasPrimitiveValues(om *OrderedMap) bool {
+	for _, k := range om.Keys() {
+		val, _ := om.Get(k)
+		if !isPrimitive(val) {
+			return false
+		}
+	}
+	return true
+}
+
+// reflectMapHasPrimitiveValues checks if all values in a reflect.Map are primitives.
+func reflectMapHasPrimitiveValues(item Value) bool {
+	itemRv := reflect.ValueOf(item)
+	if itemRv.Kind() != reflect.Map {
+		return false
+	}
+
+	for _, k := range itemRv.MapKeys() {
+		val := itemRv.MapIndex(k).Interface()
+		if !isPrimitive(val) {
+			return false
+		}
+	}
+	return true
 }
 
 // encodeEmptyArray encodes an empty array.
