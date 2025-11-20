@@ -829,19 +829,44 @@ func (sp *structuralParser) parseInlineArray(p *parser, lengthStr string, delimi
 func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, lengthStr string, delimiter string) (Value, error) {
 	p := newParser(line.content)
 
+	// Parse header keys
+	keys, headerDelimiter := parseTabularArrayHeader(p, delimiter)
+
+	// Parse rows
+	result, rowCount, err := sp.parseTabularArrayRows(baseIndent, lengthStr, keys, headerDelimiter)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate row count
+	if err := sp.validateTabularArrayLength(lengthStr, rowCount); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// parseTabularArrayHeader parses header keys from tabular array definition.
+func parseTabularArrayHeader(p *parser, delimiter string) (keys []string, headerDelimiter string) {
 	// Skip to opening brace
 	for p.peek() != '{' && !p.isEOF() {
 		p.advance()
 	}
 	p.advance() // skip {
 
-	// Use provided delimiter (tab/pipe) or default to comma
-	headerDelimiter := ","
+	// Determine delimiter
+	headerDelimiter = ","
 	if delimiter == "\t" || delimiter == "|" {
 		headerDelimiter = delimiter
 	}
 
-	// Parse keys respecting quotes and delimiter
+	// Parse keys with quote support
+	keys = parseHeaderKeys(p, headerDelimiter)
+	return keys, headerDelimiter
+}
+
+// parseHeaderKeys parses keys from header, respecting quotes and delimiters.
+func parseHeaderKeys(p *parser, delimiter string) []string {
 	keys := []string{}
 	current := ""
 	inQuotes := false
@@ -867,7 +892,6 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 				inQuotes = true
 			} else {
 				inQuotes = false
-				// Add key
 				keys = append(keys, current)
 				current = ""
 			}
@@ -876,11 +900,9 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 
 		if !inQuotes {
 			if ch == ' ' {
-				// Skip spaces outside quotes
-				continue
+				continue // Skip spaces outside quotes
 			}
-			if string(ch) == headerDelimiter {
-				// Delimiter - save current key if any
+			if string(ch) == delimiter {
 				if current != "" {
 					keys = append(keys, strings.TrimSpace(current))
 					current = ""
@@ -897,83 +919,52 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 		keys = append(keys, strings.TrimSpace(current))
 	}
 
-	// Parse data rows with delimiter-aware splitting
+	return keys
+}
+
+// parseTabularArrayRows parses data rows for tabular arrays.
+func (sp *structuralParser) parseTabularArrayRows(baseIndent int, lengthStr string, keys []string, delimiter string) ([]Value, int, error) {
 	result := make([]Value, 0)
 	sp.pos++
 	rowCount := 0
 
-	// Debug: Check parser state
+	// Check if no rows available
 	if sp.pos >= len(sp.lines) {
-		// No lines available after header - this can happen if temp parser not set up correctly
-		if lengthStr != "" && sp.opts.Strict {
-			numStr := ""
-			for _, ch := range lengthStr {
-				if ch >= '0' && ch <= '9' {
-					numStr += string(ch)
-				}
-			}
-			if numStr != "" {
-				expectedLen, _ := strconv.Atoi(numStr)
-				if expectedLen > 0 {
-					return nil, &DecodeError{
-						Message: fmt.Sprintf("tabular array length mismatch: expected %d rows, got 0 (pos=%d, total lines=%d, baseIndent=%d)", expectedLen, sp.pos, len(sp.lines), baseIndent),
-					}
-				}
-			}
+		if err := checkEmptyTabularArray(lengthStr, sp.opts.Strict, sp.pos, len(sp.lines), baseIndent); err != nil {
+			return nil, 0, err
 		}
-		return result, nil
+		return result, rowCount, nil
 	}
 
+	// Parse each row
 	for sp.pos < len(sp.lines) {
 		line := sp.lines[sp.pos]
 
+		// Handle blank lines
 		if line.isBlank {
-			if sp.opts.Strict {
-				return nil, &DecodeError{
-					Message: "blank line not allowed within tabular array in strict mode",
-					Line:    line.lineNumber,
-					Context: line.original,
-				}
+			if err := sp.handleBlankLineInTabular(line); err != nil {
+				return nil, 0, err
 			}
 			sp.pos++
 			continue
 		}
 
-		// For tabular arrays on hyphen lines, data rows can be at same indent as header
-		// Use < instead of <= to allow same-indent data rows
+		// Check indent level
 		if line.indent < baseIndent {
 			sp.pos--
 			break
 		}
 
-		// Check if this line is an object field (has unquoted colon) rather than a data row
-		// Data rows may have quoted colons, but object fields have unquoted colons
+		// Check if line is an object field rather than data row
 		if sp.hasUnquotedColon(line.content) {
-			// This looks like an object field, not a tabular row - stop parsing
 			sp.pos--
 			break
 		}
 
-		// Parse row respecting quoted values
-		parts := sp.splitRowByDelimiter(line.content, headerDelimiter)
-
-		if sp.opts.Strict && len(parts) != len(keys) {
-			return nil, &DecodeError{
-				Message: fmt.Sprintf("tabular array row has wrong number of values: expected %d, got %d", len(keys), len(parts)),
-				Line:    line.lineNumber,
-				Context: line.original,
-			}
-		}
-
-		row := make(map[string]Value)
-		for i, key := range keys {
-			if i < len(parts) {
-				value, err := parseValue(strings.TrimSpace(parts[i]))
-				if err != nil {
-					return nil, err
-				}
-				row[key] = value
-			}
+		// Parse and add row
+		row, err := sp.parseTabularRow(line, delimiter, keys)
+		if err != nil {
+			return nil, 0, err
 		}
 
 		result = append(result, row)
@@ -981,25 +972,28 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 		sp.pos++
 	}
 
-	// Validate row count if length specified
-	if lengthStr != "" && sp.opts.Strict {
-		numStr := ""
-		for _, ch := range lengthStr {
-			if ch >= '0' && ch <= '9' {
-				numStr += string(ch)
-			}
-		}
-		if numStr != "" {
-			expectedLen, _ := strconv.Atoi(numStr)
-			if rowCount != expectedLen {
-				return nil, &DecodeError{
-					Message: fmt.Sprintf("tabular array length mismatch: expected %d rows, got %d", expectedLen, rowCount),
-				}
-			}
+	return result, rowCount, nil
+}
+
+// checkEmptyTabularArray validates empty tabular array in strict mode.
+func checkEmptyTabularArray(lengthStr string, strict bool, pos, totalLines, baseIndent int) error {
+	if lengthStr == "" || !strict {
+		return nil
+	}
+
+	numStr := extractNumericLength(lengthStr)
+	if numStr == "" {
+		return nil
+	}
+
+	expectedLen, _ := strconv.Atoi(numStr)
+	if expectedLen > 0 {
+		return &DecodeError{
+			Message: fmt.Sprintf("tabular array length mismatch: expected %d rows, got 0 (pos=%d, total lines=%d, baseIndent=%d)", expectedLen, pos, totalLines, baseIndent),
 		}
 	}
 
-	return result, nil
+	return nil
 }
 
 // splitRowByDelimiter splits a row by delimiter respecting quoted strings
@@ -1088,156 +1082,195 @@ func (sp *structuralParser) parseListArray(baseIndent int, lengthStr string, del
 	for sp.pos < len(sp.lines) {
 		line := sp.lines[sp.pos]
 
+		// Handle blank lines
 		if line.isBlank {
-			// Check if array has ended (next non-blank line is at baseIndent or less)
-			// Look ahead to see if this blank line is between array items or after array
-			nextNonBlank := sp.pos + 1
-			for nextNonBlank < len(sp.lines) && sp.lines[nextNonBlank].isBlank {
-				nextNonBlank++
+			shouldBreak, err := sp.handleBlankLineInListArray(line, baseIndent)
+			if err != nil {
+				return nil, err
 			}
-			if nextNonBlank < len(sp.lines) && sp.lines[nextNonBlank].indent <= baseIndent {
-				// Blank line is after array ends - this is allowed
+			if shouldBreak {
 				sp.pos--
 				break
-			}
-			// In strict mode, blank lines within arrays are not allowed
-			if sp.opts.Strict {
-				return nil, &DecodeError{
-					Message: "blank lines not allowed within arrays in strict mode",
-					Line:    line.lineNumber,
-					Context: line.original,
-				}
 			}
 			sp.pos++
 			continue
 		}
 
+		// Check indent level
 		if line.indent <= baseIndent {
 			sp.pos--
 			break
 		}
 
 		// Check for list marker
-		if strings.HasPrefix(line.content, "-") {
-			// Parse list item
-			content := strings.TrimPrefix(line.content, "-")
-			content = strings.TrimSpace(content)
-
-			// Check if empty (just a hyphen) - should be empty object
-			if content == "" {
-				result = append(result, map[string]Value{})
-				itemCount++
-				sp.pos++
-			} else if strings.HasPrefix(content, "[") {
-				// Nested array on hyphen line
-				value, err := sp.parseArrayFromLine(line, line.indent)
-				if err != nil {
-					return nil, err
-				}
-				result = append(result, value)
-				itemCount++
-				sp.pos++
-			} else if !strings.Contains(content, ":") {
-				// Simple value
-				value, err := parseValue(content)
-				if err != nil {
-					return nil, err
-				}
-				result = append(result, value)
-				itemCount++
-				sp.pos++
-			} else {
-				// Object - collect all lines for this item
-				itemLines := []lineInfo{line}
-				itemIndent := line.indent
-				sp.pos++
-
-				for sp.pos < len(sp.lines) {
-					nextLine := sp.lines[sp.pos]
-					if nextLine.isBlank {
-						if sp.opts.Strict {
-							return nil, &DecodeError{
-								Message: "blank lines not allowed within arrays in strict mode",
-								Line:    nextLine.lineNumber,
-								Context: nextLine.original,
-							}
-						}
-						sp.pos++
-						continue
-					}
-
-					// Check if this is a new parent-level item
-					if nextLine.indent < itemIndent {
-						break // Less indented = definitely parent level
-					}
-
-					// Same indent with hyphen = new sibling item, always break
-					if nextLine.indent == itemIndent && strings.HasPrefix(nextLine.content, "-") {
-						break
-					}
-
-					// Greater indent with hyphen: check if current item is array definition
-					// If first line is array (e.g., "matrix[2]:"), hyphens at greater indent are nested array items
-					if nextLine.indent > itemIndent && strings.HasPrefix(nextLine.content, "-") {
-						// Get first line of current item (strip hyphen)
-						firstContent := strings.TrimPrefix(itemLines[0].content, "-")
-						firstContent = strings.TrimSpace(firstContent)
-
-						// If first line is array header (ends with : and has [N]),
-						// then this hyphen is a nested array item
-						hasArrayNotation := strings.Contains(firstContent, "[") && strings.Contains(firstContent, "]")
-						endsWithColon := strings.HasSuffix(firstContent, ":")
-
-						if hasArrayNotation && endsWithColon {
-							// Continue - this is nested array item
-							itemLines = append(itemLines, nextLine)
-							sp.pos++
-							continue
-						}
-
-						// Otherwise it's content with a hyphen, treat as regular content
-					}
-
-					// More indented = part of current item (or we determined hyphen is nested array item above)
-					itemLines = append(itemLines, nextLine)
-					sp.pos++
-				}
-
-				// Parse item as object
-				item, err := sp.parseListItem(itemLines, itemIndent, delimiter)
-				if err != nil {
-					return nil, err
-				}
-				result = append(result, item)
-				itemCount++
-			}
-		} else {
-			// Line doesn't start with hyphen - stop array parsing
-			// This line is likely a sibling field to the array
+		if !strings.HasPrefix(line.content, "-") {
 			sp.pos--
 			break
 		}
+
+		// Parse list item
+		item, err := sp.parseListArrayItem(line, baseIndent, delimiter)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, item)
+		itemCount++
 	}
 
-	// Validate array length if specified
-	if lengthStr != "" && sp.opts.Strict {
-		numStr := ""
-		for _, ch := range lengthStr {
-			if ch >= '0' && ch <= '9' {
-				numStr += string(ch)
-			}
-		}
-		if numStr != "" {
-			expectedLen, _ := strconv.Atoi(numStr)
-			if itemCount != expectedLen {
-				return nil, &DecodeError{
-					Message: fmt.Sprintf("list array length mismatch: expected %d, got %d", expectedLen, itemCount),
-				}
-			}
-		}
+	// Validate array length
+	if err := sp.validateListArrayLength(lengthStr, itemCount); err != nil {
+		return nil, err
 	}
 
 	return result, nil
+}
+
+// handleBlankLineInListArray handles blank lines within list arrays.
+func (sp *structuralParser) handleBlankLineInListArray(line lineInfo, baseIndent int) (shouldBreak bool, err error) {
+	// Look ahead to see if this blank line is between items or after array
+	nextNonBlank := sp.pos + 1
+	for nextNonBlank < len(sp.lines) && sp.lines[nextNonBlank].isBlank {
+		nextNonBlank++
+	}
+	if nextNonBlank < len(sp.lines) && sp.lines[nextNonBlank].indent <= baseIndent {
+		// Blank line is after array ends
+		return true, nil
+	}
+
+	// In strict mode, blank lines within arrays are not allowed
+	if sp.opts.Strict {
+		return false, &DecodeError{
+			Message: "blank lines not allowed within arrays in strict mode",
+			Line:    line.lineNumber,
+			Context: line.original,
+		}
+	}
+
+	return false, nil
+}
+
+// parseListArrayItem parses a single item in a list array.
+func (sp *structuralParser) parseListArrayItem(line lineInfo, baseIndent int, delimiter string) (Value, error) {
+	content := strings.TrimSpace(strings.TrimPrefix(line.content, "-"))
+
+	// Empty item
+	if content == "" {
+		sp.pos++
+		return map[string]Value{}, nil
+	}
+
+	// Nested array
+	if strings.HasPrefix(content, "[") {
+		value, err := sp.parseArrayFromLine(line, line.indent)
+		if err != nil {
+			return nil, err
+		}
+		sp.pos++
+		return value, nil
+	}
+
+	// Simple value (no colon)
+	if !strings.Contains(content, ":") {
+		value, err := parseValue(content)
+		if err != nil {
+			return nil, err
+		}
+		sp.pos++
+		return value, nil
+	}
+
+	// Object - collect all lines for this item
+	return sp.collectAndParseListObject(line, delimiter)
+}
+
+// collectAndParseListObject collects multi-line object and parses it.
+func (sp *structuralParser) collectAndParseListObject(line lineInfo, delimiter string) (Value, error) {
+	itemLines := []lineInfo{line}
+	itemIndent := line.indent
+	sp.pos++
+
+	for sp.pos < len(sp.lines) {
+		nextLine := sp.lines[sp.pos]
+
+		// Handle blank lines within item
+		if nextLine.isBlank {
+			if sp.opts.Strict {
+				return nil, &DecodeError{
+					Message: "blank lines not allowed within arrays in strict mode",
+					Line:    nextLine.lineNumber,
+					Context: nextLine.original,
+				}
+			}
+			sp.pos++
+			continue
+		}
+
+		// Check if we should stop collecting lines
+		if shouldStopCollectingLines(nextLine, itemIndent, itemLines) {
+			break
+		}
+
+		itemLines = append(itemLines, nextLine)
+		sp.pos++
+	}
+
+	// Parse item as object
+	return sp.parseListItem(itemLines, itemIndent, delimiter)
+}
+
+// shouldStopCollectingLines determines if line collection should stop.
+func shouldStopCollectingLines(nextLine lineInfo, itemIndent int, itemLines []lineInfo) bool {
+	// Less indented = parent level
+	if nextLine.indent < itemIndent {
+		return true
+	}
+
+	// Same indent with hyphen = new sibling item
+	if nextLine.indent == itemIndent && strings.HasPrefix(nextLine.content, "-") {
+		return true
+	}
+
+	// Greater indent with hyphen: check if it's a nested array item
+	if nextLine.indent > itemIndent && strings.HasPrefix(nextLine.content, "-") {
+		return !isNestedArrayItem(itemLines)
+	}
+
+	return false
+}
+
+// isNestedArrayItem checks if hyphen line is part of a nested array.
+func isNestedArrayItem(itemLines []lineInfo) bool {
+	if len(itemLines) == 0 {
+		return false
+	}
+
+	firstContent := strings.TrimSpace(strings.TrimPrefix(itemLines[0].content, "-"))
+	hasArrayNotation := strings.Contains(firstContent, "[") && strings.Contains(firstContent, "]")
+	endsWithColon := strings.HasSuffix(firstContent, ":")
+
+	return hasArrayNotation && endsWithColon
+}
+
+// validateListArrayLength validates list array length matches expected.
+func (sp *structuralParser) validateListArrayLength(lengthStr string, itemCount int) error {
+	if lengthStr == "" || !sp.opts.Strict {
+		return nil
+	}
+
+	numStr := extractNumericLength(lengthStr)
+	if numStr == "" {
+		return nil
+	}
+
+	expectedLen, _ := strconv.Atoi(numStr)
+	if itemCount != expectedLen {
+		return &DecodeError{
+			Message: fmt.Sprintf("list array length mismatch: expected %d, got %d", expectedLen, itemCount),
+		}
+	}
+
+	return nil
 }
 
 // parseListItem parses a single list item (which may be an object).

@@ -188,3 +188,5 @@ MIT
 ## Author
 
 Created by [Stefano Straus](https://github.com/sstraus) in 2025.
+
+Based on [Johann Schopplich](https://github.com/johannschopplich) specifications.
