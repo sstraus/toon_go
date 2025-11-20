@@ -51,21 +51,3 @@ var structureChars = []string{
 
 // Control characters that need escaping
 var controlChars = []string{"\n", "\r", "\t", "\b", "\f"}
-
-// Escape sequence mappings
-var escapeSequences = map[string]string{
-	"\\": "\\\\",
-	"\"": "\\\"",
-	"\n": "\\n",
-	"\r": "\\r",
-	"\t": "\\t",
-}
-
-// Unescape sequence mappings
-var unescapeSequences = map[string]string{
-	"\\\\": "\\",
-	"\\\"": "\"",
-	"\\n":  "\n",
-	"\\r":  "\r",
-	"\\t":  "\t",
-}
