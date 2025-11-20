@@ -179,21 +179,37 @@ func safeKey(k string) bool {
 		return false
 	}
 
-	// First character must be letter or underscore
-	first := rune(k[0])
-	if !((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z') || first == '_') {
+	if !isValidFirstChar(rune(k[0])) {
 		return false
 	}
 
-	// Remaining characters must be alphanumeric, underscore, or dot
 	for _, ch := range k[1:] {
-		if !((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
-			(ch >= '0' && ch <= '9') || ch == '_' || ch == '.') {
+		if !isValidKeyChar(ch) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// isValidFirstChar checks if a character is valid as the first character of a key.
+func isValidFirstChar(ch rune) bool {
+	return isLetter(ch) || ch == '_'
+}
+
+// isValidKeyChar checks if a character is valid in a key (after the first character).
+func isValidKeyChar(ch rune) bool {
+	return isLetter(ch) || isDigit(ch) || ch == '_' || ch == '.'
+}
+
+// isLetter checks if a character is an ASCII letter.
+func isLetter(ch rune) bool {
+	return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+}
+
+// isDigit checks if a character is an ASCII digit.
+func isDigit(ch rune) bool {
+	return ch >= '0' && ch <= '9'
 }
 
 // unescapeString unescapes special characters in a string.
