@@ -152,65 +152,87 @@ func (sp *structuralParser) detectRootType() (rootType, error) {
 		return rootTypeArray, nil
 	}
 
-	// Check if single line (primitive)
+	// Check if single line (primitive or object)
 	if len(sp.lines) == 1 {
-		// If starts with quote, check if it's a quoted key (has : after closing quote)
-		if strings.HasPrefix(firstLine.content, "\"") {
-			// Look for closing quote
-			inQuote := false
-			escaped := false
-			for i := 0; i < len(firstLine.content); i++ {
-				ch := firstLine.content[i]
-				if i == 0 {
-					inQuote = true
-					continue
-				}
-				if escaped {
-					escaped = false
-					continue
-				}
-				if ch == '\\' {
-					escaped = true
-					continue
-				}
-				if ch == '"' && inQuote {
-					// Found closing quote, check what comes after
-					remaining := strings.TrimSpace(firstLine.content[i+1:])
-					if strings.HasPrefix(remaining, ":") || strings.HasPrefix(remaining, "[") {
-						// It's a quoted key
-						return rootTypeObject, nil
-					}
-					// It's a quoted primitive value
-					return rootTypePrimitive, nil
-				}
-			}
-			// Unterminated quote - treat as primitive (will error during parse)
-			return rootTypePrimitive, nil
-		}
-
-		// Check if it has a colon (key-value pair = object)
-		if strings.Contains(firstLine.content, ":") {
-			// If line ends with colon (empty value), it's an object
-			if strings.HasSuffix(strings.TrimSpace(firstLine.content), ":") {
-				return rootTypeObject, nil
-			}
-			// Could be object or primitive with colon in value
-			// Need to parse to determine
-			parts := strings.SplitN(firstLine.content, ":", 2)
-			if len(parts) == 2 {
-				// If there's content after colon or key has brackets, it's an object
-				after := strings.TrimSpace(parts[1])
-				if after != "" || strings.Contains(parts[0], "[") {
-					return rootTypeObject, nil
-				}
-			}
-		}
-		// No colon or empty after colon (no key) = primitive
-		return rootTypePrimitive, nil
+		return detectSingleLineType(firstLine.content), nil
 	}
 
 	// Multiple lines = object
 	return rootTypeObject, nil
+}
+
+// detectSingleLineType determines if a single line is a primitive or object.
+func detectSingleLineType(content string) rootType {
+	// If starts with quote, check if it's a quoted key or value
+	if strings.HasPrefix(content, "\"") {
+		return detectQuotedLineType(content)
+	}
+
+	// Check if it has a colon indicating key-value pair
+	if hasColonIndicatingObject(content) {
+		return rootTypeObject
+	}
+
+	// No colon or empty after colon = primitive
+	return rootTypePrimitive
+}
+
+// detectQuotedLineType determines if a quoted line is a key (object) or value (primitive).
+func detectQuotedLineType(content string) rootType {
+	// Look for closing quote
+	inQuote := false
+	escaped := false
+	for i := 0; i < len(content); i++ {
+		ch := content[i]
+		if i == 0 {
+			inQuote = true
+			continue
+		}
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if ch == '"' && inQuote {
+			// Found closing quote, check what comes after
+			remaining := strings.TrimSpace(content[i+1:])
+			if strings.HasPrefix(remaining, ":") || strings.HasPrefix(remaining, "[") {
+				// It's a quoted key
+				return rootTypeObject
+			}
+			// It's a quoted primitive value
+			return rootTypePrimitive
+		}
+	}
+	// Unterminated quote - treat as primitive (will error during parse)
+	return rootTypePrimitive
+}
+
+// hasColonIndicatingObject checks if content has a colon indicating it's an object.
+func hasColonIndicatingObject(content string) bool {
+	if !strings.Contains(content, ":") {
+		return false
+	}
+
+	// If line ends with colon (empty value), it's an object
+	if strings.HasSuffix(strings.TrimSpace(content), ":") {
+		return true
+	}
+
+	// Could be object or primitive with colon in value
+	parts := strings.SplitN(content, ":", 2)
+	if len(parts) == 2 {
+		// If there's content after colon or key has brackets, it's an object
+		after := strings.TrimSpace(parts[1])
+		if after != "" || strings.Contains(parts[0], "[") {
+			return true
+		}
+	}
+
+	return false
 }
 
 // parseRootPrimitive parses a single primitive value.
@@ -236,54 +258,83 @@ func (sp *structuralParser) parseObject(baseIndent int, startPos int) (Value, er
 	for sp.pos < len(sp.lines) {
 		line := sp.lines[sp.pos]
 
-		// Skip blank lines in objects - allowed between fields
-		// Blank lines within arrays are handled by array parsing functions
-		if line.isBlank {
+		// Handle blank lines and indent checks
+		skipAction := shouldSkipObjectLine(line, baseIndent)
+		if skipAction == skipAndContinue {
 			sp.pos++
 			continue
 		}
-
-		// Check if we've moved to a different indent level
-		if line.indent < baseIndent {
+		if skipAction == stopParsing {
 			break
 		}
 
-		if line.indent > baseIndent {
-			// Skip lines that are more indented (they'll be parsed as part of nested values)
-			sp.pos++
-			continue
-		}
-
-		// Parse key-value pair
-		key, wasQuoted, value, err := sp.parseKeyValueLineWithQuoteInfo(line, baseIndent)
-		if err != nil {
+		// Parse and handle key-value pair
+		if err := sp.handleObjectKeyValuePair(line, baseIndent, result); err != nil {
 			return nil, err
 		}
 
-		// Apply path expansion if enabled, key contains dots, was not quoted, and all segments are valid identifiers
-		if sp.opts.ExpandPaths == "safe" && !wasQuoted && strings.Contains(key, ".") && isExpandablePath(key) {
-			if err := sp.expandDottedKey(key, value, result); err != nil {
-				return nil, err
-			}
-		} else {
-			// Check for conflict with already-expanded paths in strict mode
-			if sp.opts.Strict && sp.opts.ExpandPaths == "safe" {
-				if existing, exists := result[key]; exists {
-					existingType := getValueType(existing)
-					newType := getValueType(value)
-					if existingType == "object" && newType != "object" && newType != "null" {
-						return nil, &DecodeError{
-							Message: fmt.Sprintf("path expansion conflict: key %q conflicts with expanded path (type %s cannot overwrite %s)", key, newType, existingType),
-						}
-					}
-				}
-			}
-			result[key] = value
-		}
 		sp.pos++
 	}
 
 	return result, nil
+}
+
+// lineSkipAction indicates what action to take for a line.
+type lineSkipAction int
+
+const (
+	parseThisLine lineSkipAction = iota
+	skipAndContinue
+	stopParsing
+)
+
+// shouldSkipObjectLine determines if a line should be skipped during object parsing.
+func shouldSkipObjectLine(line lineInfo, baseIndent int) lineSkipAction {
+	if line.isBlank {
+		return skipAndContinue
+	}
+	if line.indent < baseIndent {
+		return stopParsing
+	}
+	if line.indent > baseIndent {
+		return skipAndContinue
+	}
+	return parseThisLine
+}
+
+// handleObjectKeyValuePair parses and adds a key-value pair to the result.
+func (sp *structuralParser) handleObjectKeyValuePair(line lineInfo, baseIndent int, result map[string]Value) error {
+	key, wasQuoted, value, err := sp.parseKeyValueLineWithQuoteInfo(line, baseIndent)
+	if err != nil {
+		return err
+	}
+
+	// Check if path expansion should be applied
+	shouldExpand := sp.opts.ExpandPaths == "safe" && !wasQuoted && strings.Contains(key, ".") && isExpandablePath(key)
+
+	if shouldExpand {
+		return sp.expandDottedKey(key, value, result)
+	}
+
+	// Direct assignment with conflict checking
+	return sp.assignKeyWithConflictCheck(key, value, result)
+}
+
+// assignKeyWithConflictCheck assigns a key with strict mode conflict checking.
+func (sp *structuralParser) assignKeyWithConflictCheck(key string, value Value, result map[string]Value) error {
+	if sp.opts.Strict && sp.opts.ExpandPaths == "safe" {
+		if existing, exists := result[key]; exists {
+			existingType := getValueType(existing)
+			newType := getValueType(value)
+			if existingType == "object" && newType != "object" && newType != "null" {
+				return &DecodeError{
+					Message: fmt.Sprintf("path expansion conflict: key %q conflicts with expanded path (type %s cannot overwrite %s)", key, newType, existingType),
+				}
+			}
+		}
+	}
+	result[key] = value
+	return nil
 }
 
 // expandDottedKey expands a dotted key path into nested maps with conflict resolution.
