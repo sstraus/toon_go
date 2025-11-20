@@ -1283,243 +1283,253 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 	content := strings.TrimPrefix(firstLine.content, "-")
 	content = strings.TrimSpace(content)
 
-	// Check for array on hyphen line - handle key[...]syntax
-	if strings.HasPrefix(content, "[") {
-		return sp.parseArrayFromLine(firstLine, baseIndent)
+	// Try various parsing strategies in order
+	if value, ok, err := sp.tryParseDirectArray(content, firstLine, baseIndent); ok {
+		return value, err
 	}
 
-	// Check if first line contains key with array notation
-	if strings.Contains(content, "[") && strings.Contains(content, "]") {
-		// Parse key with array marker
-		p := newParser(content)
-		key, err := p.parseKey()
-		if err == nil && p.peek() == '[' {
-			// This is an array definition on the hyphen line
-			// Create temp parser with just the lines for this item
-			adjustedLines := make([]lineInfo, len(lines))
-			copy(adjustedLines, lines)
-			adjustedLines[0].content = content // Remove "- " prefix
+	if value, ok, err := sp.tryParseKeyWithArray(content, lines, baseIndent); ok {
+		return value, err
+	}
 
-			tempSP := &structuralParser{
-				lines: adjustedLines,
-				pos:   0,
-				opts:  sp.opts,
+	if value, ok, err := sp.tryParseSingleLine(content, lines); ok {
+		return value, err
+	}
+
+	if value, ok, err := sp.tryParseTabularArray(content, lines, baseIndent); ok {
+		return value, err
+	}
+
+	// Parse as multi-line object
+	return sp.parseMultiLineListItem(content, lines, baseIndent)
+}
+
+// tryParseDirectArray checks if content is a direct array starting with [.
+func (sp *structuralParser) tryParseDirectArray(content string, firstLine lineInfo, baseIndent int) (Value, bool, error) {
+	if !strings.HasPrefix(content, "[") {
+		return nil, false, nil
+	}
+	value, err := sp.parseArrayFromLine(firstLine, baseIndent)
+	return value, true, err
+}
+
+// tryParseKeyWithArray checks if first line has key with array notation.
+func (sp *structuralParser) tryParseKeyWithArray(content string, lines []lineInfo, baseIndent int) (Value, bool, error) {
+	if !strings.Contains(content, "[") || !strings.Contains(content, "]") {
+		return nil, false, nil
+	}
+
+	p := newParser(content)
+	key, err := p.parseKey()
+	if err != nil || p.peek() != '[' {
+		return nil, false, nil
+	}
+
+	// Parse array with adjusted lines
+	adjustedLines := make([]lineInfo, len(lines))
+	copy(adjustedLines, lines)
+	adjustedLines[0].content = content
+
+	tempSP := &structuralParser{
+		lines: adjustedLines,
+		pos:   0,
+		opts:  sp.opts,
+	}
+
+	value, err := tempSP.parseArrayFromLine(adjustedLines[0], baseIndent)
+	if err != nil {
+		return nil, true, err
+	}
+
+	result := map[string]Value{key: value}
+
+	// Parse any remaining sibling fields
+	if tempSP.pos < len(adjustedLines)-1 {
+		for i := tempSP.pos + 1; i < len(adjustedLines); i++ {
+			line := adjustedLines[i]
+			if line.isBlank || !strings.Contains(line.content, ":") {
+				continue
 			}
-
-			// Parse array using temp parser with proper base indent
-			value, err := tempSP.parseArrayFromLine(adjustedLines[0], baseIndent)
+			k, v, err := sp.parseKeyValueLine(line, baseIndent)
 			if err != nil {
-				return nil, err
+				continue
 			}
-
-			// Start building result with the array
-			result := map[string]Value{key: value}
-
-			// Check if there are remaining lines at the same or greater indent (sibling fields)
-			// tempSP.pos points to the last line consumed by array parsing
-			// Lines after tempSP.pos are sibling fields at same indent as hyphen
-			if tempSP.pos < len(adjustedLines)-1 {
-				// Parse remaining lines as object fields
-				remainingStartPos := tempSP.pos + 1
-				for i := remainingStartPos; i < len(adjustedLines); i++ {
-					line := adjustedLines[i]
-
-					// Skip blank lines
-					if line.isBlank {
-						continue
-					}
-
-					// Parse as key-value line
-					if strings.Contains(line.content, ":") {
-						k, v, err := sp.parseKeyValueLine(line, baseIndent)
-						if err != nil {
-							return nil, err
-						}
-						result[k] = v
-					}
-				}
-			}
-
-			return result, nil
+			result[k] = v
 		}
 	}
 
-	// If only one line, parse as key-value or simple value
-	if len(lines) == 1 {
-		if !strings.Contains(content, ":") {
-			// Try to parse as value (may be array or primitive)
-			return parseValue(content)
+	return result, true, nil
+}
+
+// tryParseSingleLine checks if this is a single-line item.
+func (sp *structuralParser) tryParseSingleLine(content string, lines []lineInfo) (Value, bool, error) {
+	if len(lines) != 1 {
+		return nil, false, nil
+	}
+	if strings.Contains(content, ":") {
+		return nil, false, nil
+	}
+	value, err := parseValue(content)
+	return value, true, err
+}
+
+// tryParseTabularArray checks if first line is a tabular array header.
+func (sp *structuralParser) tryParseTabularArray(content string, lines []lineInfo, baseIndent int) (Value, bool, error) {
+	if !strings.Contains(content, "[") || !strings.Contains(content, "{") || !strings.Contains(content, "}") {
+		return nil, false, nil
+	}
+
+	p := newParser(content)
+	key, err := p.parseKey()
+	if err != nil || p.peek() != '[' {
+		return nil, false, nil
+	}
+
+	// Parse tabular array
+	adjustedLines := make([]lineInfo, len(lines))
+	copy(adjustedLines, lines)
+	adjustedLines[0].content = content
+
+	tempSP := &structuralParser{
+		lines: adjustedLines,
+		pos:   0,
+		opts:  sp.opts,
+	}
+
+	value, err := tempSP.parseArrayFromLine(adjustedLines[0], adjustedLines[0].indent)
+	if err != nil {
+		return nil, true, err
+	}
+
+	result := map[string]Value{key: value}
+
+	// Parse remaining fields
+	for i := tempSP.pos + 1; i < len(adjustedLines); i++ {
+		line := adjustedLines[i]
+		if line.isBlank || line.indent <= baseIndent {
+			continue
+		}
+
+		lp := newParser(line.content)
+		fkey, ferr := lp.parseKey()
+		if ferr != nil || lp.expect(':') != nil {
+			continue
+		}
+		lp.skipWhitespace()
+		if fval, ferr := parseValue(lp.input[lp.pos:]); ferr == nil {
+			result[fkey] = fval
 		}
 	}
 
-	// Parse as object with proper nesting support
+	return result, true, nil
+}
+
+// parseMultiLineListItem parses a multi-line list item as an object.
+func (sp *structuralParser) parseMultiLineListItem(content string, lines []lineInfo, baseIndent int) (Value, error) {
 	result := make(map[string]Value)
 
-	// Check if first line is tabular array header (e.g., users[2]{id,name}:)
-	if strings.Contains(content, "[") && strings.Contains(content, "{") && strings.Contains(content, "}") {
-		// This might be a tabular array on the hyphen line
-		p := newParser(content)
-		key, err := p.parseKey()
-		if err == nil && p.peek() == '[' {
-			// This is a tabular array on hyphen line - need to parse with full context
-			// Adjust lines to remove the "- " prefix from first line for proper parsing
-			adjustedLines := make([]lineInfo, len(lines))
-			copy(adjustedLines, lines)
-			adjustedLines[0].content = content // Already has "- " removed
+	// Parse first line and determine starting position
+	firstKey, startIdx := sp.parseFirstLineOfListItem(content, lines, baseIndent, result)
 
-			// For tabular arrays on hyphen lines, the data rows should be at indent > first line indent
-			// Create a temp parser with ONLY the lines for this array
-			tempSP := &structuralParser{
-				lines: adjustedLines,
-				pos:   0,
-				opts:  sp.opts,
-			}
-
-			// Parse the array starting from first line with proper indent
-			value, err := tempSP.parseArrayFromLine(adjustedLines[0], adjustedLines[0].indent)
-			if err != nil {
-				return nil, err
-			}
-
-			// Build result object with the array and any remaining fields
-			result := make(map[string]Value)
-			result[key] = value
-
-			// Check if there are more fields after the array (tempSP.pos points to next unparsed line)
-			for i := tempSP.pos + 1; i < len(adjustedLines); i++ {
-				line := adjustedLines[i]
-				if line.isBlank {
-					continue
-				}
-				if line.indent <= baseIndent {
-					break
-				}
-
-				// Parse additional fields
-				lp := newParser(line.content)
-				fkey, ferr := lp.parseKey()
-				if ferr != nil {
-					continue
-				}
-				if ferr := lp.expect(':'); ferr != nil {
-					continue
-				}
-				lp.skipWhitespace()
-				remaining := lp.input[lp.pos:]
-				if fval, ferr := parseValue(remaining); ferr == nil {
-					result[fkey] = fval
-				}
-			}
-
-			return result, nil
+	// Handle special case: firstKey with nested content
+	if firstKey != "" && !strings.Contains(firstKey, "[") {
+		if _, exists := result[firstKey]; !exists && len(lines) > 1 {
+			return sp.parseNestedUnderFirstKey(firstKey, lines, result)
 		}
 	}
 
-	// Parse first line
-	var firstKey string
-	if strings.Contains(content, ":") {
-		parts := strings.SplitN(content, ":", 2)
-		key := strings.TrimSpace(parts[0])
-		valueStr := ""
-		if len(parts) > 1 {
-			valueStr = strings.TrimSpace(parts[1])
-		}
+	// Parse remaining lines
+	if err := sp.parseRemainingListItemLines(lines, startIdx, baseIndent, firstKey, result); err != nil {
+		return nil, err
+	}
 
-		// Handle keys with array notation
-		if strings.Contains(key, "[") && strings.Contains(key, "]") {
-			baseKey := key[:strings.Index(key, "[")]
-			if valueStr == "" {
-				// Check if this is truly empty array (key[0]:) or has nested content
-				if strings.HasSuffix(key, "[0]") {
-					// Explicitly marked as empty array
-					result[baseKey] = []interface{}{}
-				}
-				// else: Array with size but empty value - will be handled by loop at i=0
-			} else {
-				// Parse the value
-				value, err := parseValue(valueStr)
-				if err != nil {
-					return nil, err
-				}
+	// If no fields parsed, try as primitive value
+	if len(result) == 0 {
+		return parseValue(content)
+	}
+
+	return result, nil
+}
+
+// parseFirstLineOfListItem parses the first line and returns firstKey and start index.
+func (sp *structuralParser) parseFirstLineOfListItem(content string, lines []lineInfo, baseIndent int, result map[string]Value) (string, int) {
+	if !strings.Contains(content, ":") {
+		return "", 1
+	}
+
+	parts := strings.SplitN(content, ":", 2)
+	key := strings.TrimSpace(parts[0])
+	valueStr := ""
+	if len(parts) > 1 {
+		valueStr = strings.TrimSpace(parts[1])
+	}
+
+	// Handle keys with array notation
+	if strings.Contains(key, "[") && strings.Contains(key, "]") {
+		baseKey := key[:strings.Index(key, "[")]
+		if valueStr == "" {
+			if strings.HasSuffix(key, "[0]") {
+				result[baseKey] = []interface{}{}
+			}
+		} else {
+			if value, err := parseValue(valueStr); err == nil {
 				result[baseKey] = value
 			}
-		} else if valueStr != "" {
-			// Parse value - may be array, object, or primitive
-			value, err := parseValue(valueStr)
-			if err != nil {
-				return nil, err
-			}
+		}
+		return "", 1
+	}
+
+	// Regular key with value
+	if valueStr != "" {
+		if value, err := parseValue(valueStr); err == nil {
 			result[key] = value
-		} else if !strings.Contains(key, "[") && len(lines) > 1 {
-			// Key with empty value and NO array notation (e.g., "properties:") - might be nested object wrapper
-			// Only treat as wrapper if there are nested lines with greater indent
-			actualKey := key
-			// Find all subsequent lines with greater indent
-			nestedLines := []lineInfo{}
-			baseIndent := lines[0].indent
-			for j := 1; j < len(lines); j++ {
-				if lines[j].isBlank {
-					continue
-				}
-				if lines[j].indent > baseIndent {
-					nestedLines = append(nestedLines, lines[j])
-				} else {
-					break
-				}
-			}
-			if len(nestedLines) > 0 {
-				// Parse nested lines as object with adjusted indent
-				tempSP := newStructuralParser("", sp.opts)
-				tempSP.lines = nestedLines
-				tempSP.pos = 0
-				nestedObj, err := tempSP.parseObject(nestedLines[0].indent, 0)
-				if err != nil {
-					return nil, err
-				}
-				result[actualKey] = nestedObj
-				return result, nil
-			}
-			// No nested lines found, treat as regular empty value
-			firstKey = actualKey
-		} else {
-			// Empty value - mark this key for special handling
-			// Don't add to result yet, let the loop handle nested content
-			firstKey = key
+		}
+		return "", 1
+	}
+
+	// Empty value - check for nested content wrapper
+	if len(lines) > 1 {
+		nestedLines := collectNestedLines(lines, 1, lines[0].indent)
+		if len(nestedLines) > 0 {
+			return key, 1
 		}
 	}
 
-	// Parse remaining lines with multi-level recursion support and depth tracking
-	// Start at i=0 if first line has array notation with empty value (needs to be processed by loop)
-	i := 1
+	return key, 1
+}
+
+// parseNestedUnderFirstKey parses all nested lines under the first key.
+func (sp *structuralParser) parseNestedUnderFirstKey(firstKey string, lines []lineInfo, result map[string]Value) (Value, error) {
+	nestedLines := lines[1:]
+	if len(nestedLines) == 0 {
+		return result, nil
+	}
+
+	tempSP := newStructuralParser("", sp.opts)
+	tempSP.lines = nestedLines
+	tempSP.pos = 0
+
+	nestedObj, err := tempSP.parseObject(nestedLines[0].indent, 0)
+	if err != nil {
+		return nil, err
+	}
+	result[firstKey] = nestedObj
+	return result, nil
+}
+
+// parseRemainingListItemLines parses the remaining lines of a list item.
+func (sp *structuralParser) parseRemainingListItemLines(lines []lineInfo, startIdx, baseIndent int, firstKey string, result map[string]Value) error {
+	// Determine actual start index based on array notation check
+	i := startIdx
+	content := strings.TrimPrefix(lines[0].content, "-")
+	content = strings.TrimSpace(content)
+
 	if strings.Contains(content, "[") && strings.Contains(content, "]") && strings.Contains(content, ":") {
 		parts := strings.SplitN(content, ":", 2)
 		if len(parts) > 1 && strings.TrimSpace(parts[1]) == "" {
 			key := strings.TrimSpace(parts[0])
 			if !strings.HasSuffix(key, "[0]") {
-				// Non-empty array with no inline value - start loop at i=0 to process it
 				i = 0
-			}
-		}
-	}
-
-	// Special handling: if firstKey was set but not added to result (empty value on first line),
-	// parse all remaining lines as nested content under firstKey - but ONLY for non-array keys
-	if firstKey != "" && !strings.Contains(firstKey, "[") {
-		_, exists := result[firstKey]
-		if !exists && len(lines) > 1 {
-			nestedLines := lines[1:]
-			if len(nestedLines) > 0 {
-				// Parse as nested object
-				tempSP := newStructuralParser("", sp.opts)
-				tempSP.lines = nestedLines
-				tempSP.pos = 0
-
-				nestedObj, err := tempSP.parseObject(nestedLines[0].indent, 0)
-				if err != nil {
-					return nil, err
-				}
-				result[firstKey] = nestedObj
-				return result, nil
 			}
 		}
 	}
@@ -1538,36 +1548,15 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 			continue
 		}
 
-		// Check for array marker
+		// Handle array
 		if p.peek() == '[' {
-			// This is an array - parse it with proper depth
-			tempSP := newStructuralParser(line.content, sp.opts)
-			tempSP.lines = []lineInfo{line}
-			tempSP.pos = 0
-
-			// Collect nested lines for this array (multi-level recursion)
-			currentIndent := line.indent
-			j := i + 1
-			for j < len(lines) {
-				nextLine := lines[j]
-				if nextLine.isBlank {
-					j++
-					continue
-				}
-				if nextLine.indent <= currentIndent {
-					break
-				}
-				tempSP.lines = append(tempSP.lines, nextLine)
-				j++
-			}
-
-			value, err := tempSP.parseArrayFromLine(line, currentIndent)
+			value, nextIdx, err := sp.parseNestedArray(lines, i, line.indent)
 			if err != nil {
 				i++
 				continue
 			}
 			result[key] = value
-			i = j
+			i = nextIdx
 			continue
 		}
 
@@ -1579,185 +1568,201 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 		p.skipWhitespace()
 		remaining := p.input[p.pos:]
 
-		// Check if value is on same line or nested
+		// Handle nested or inline value
 		if remaining == "" || strings.TrimSpace(remaining) == "" {
-			// Empty value - check for nested content with multi-level support
-			nestedLines := []lineInfo{}
-			currentIndent := line.indent
-			j := i + 1
-			for j < len(lines) {
-				nextLine := lines[j]
-				if nextLine.isBlank {
-					j++
-					continue
-				}
-				if nextLine.indent <= currentIndent {
-					break
-				}
-				nestedLines = append(nestedLines, nextLine)
-				j++
-			}
-
-			if len(nestedLines) > 0 {
-				// Recursively parse nested content with depth limit (prevent stack overflow)
-				if len(nestedLines) > 100 {
-					return nil, &DecodeError{Message: "nesting depth exceeded limit"}
-				}
-
-				// Check if this is the first key with empty value - if so, wrap nested content
-				if key == firstKey && firstKey != "" {
-					// This is the first key (like "properties:") - wrap all nested content under it
-					// Create a temporary structural parser to parse the nested content as an object
-					tempSP := newStructuralParser("", sp.opts)
-					tempSP.lines = nestedLines
-					tempSP.pos = 0
-
-					// Parse as a nested object starting from the first nested line's indent
-					nestedObj, err := tempSP.parseObject(nestedLines[0].indent, 0)
-					if err != nil {
-						return nil, err
-					}
-					result[key] = nestedObj
-					i = j
-					continue
-				}
-
-				// Use parseListItem recursively for multi-level nested structures
-				nestedResult := make(map[string]Value)
-				k := 0
-				for k < len(nestedLines) {
-					nestedLine := nestedLines[k]
-					np := newParser(nestedLine.content)
-					nkey, nerr := np.parseKey()
-					if nerr != nil {
-						k++
-						continue
-					}
-
-					// Check for nested arrays
-					if np.peek() == '[' {
-						tempSP := newStructuralParser(nestedLine.content, sp.opts)
-						tempSP.lines = []lineInfo{nestedLine}
-						tempSP.pos = 0
-
-						// Collect deeply nested lines
-						nestedIndent := nestedLine.indent
-						m := k + 1
-						for m < len(nestedLines) {
-							deepLine := nestedLines[m]
-							if deepLine.isBlank {
-								m++
-								continue
-							}
-							if deepLine.indent <= nestedIndent {
-								break
-							}
-							tempSP.lines = append(tempSP.lines, deepLine)
-							m++
-						}
-
-						nvalue, nerr := tempSP.parseArrayFromLine(nestedLine, nestedIndent)
-						if nerr != nil {
-							k++
-							continue
-						}
-						nestedResult[nkey] = nvalue
-						k = m
-						continue
-					}
-
-					if nerr := np.expect(':'); nerr != nil {
-						k++
-						continue
-					}
-					np.skipWhitespace()
-					nremaining := np.input[np.pos:]
-
-					// Check for deeply nested objects
-					if nremaining == "" || strings.TrimSpace(nremaining) == "" {
-						deepNestedLines := []lineInfo{}
-						nestedIndent := nestedLine.indent
-						m := k + 1
-						for m < len(nestedLines) {
-							deepLine := nestedLines[m]
-							if deepLine.isBlank {
-								m++
-								continue
-							}
-							if deepLine.indent <= nestedIndent {
-								break
-							}
-							deepNestedLines = append(deepNestedLines, deepLine)
-							m++
-						}
-
-						if len(deepNestedLines) > 0 {
-							// Recursively parse deeper nesting
-							deepNested := make(map[string]Value)
-							for _, deepLine := range deepNestedLines {
-								dnp := newParser(deepLine.content)
-								dnkey, dnerr := dnp.parseKey()
-								if dnerr != nil {
-									continue
-								}
-								if dnp.peek() == '[' {
-									tempSP := newStructuralParser(deepLine.content, sp.opts)
-									tempSP.lines = []lineInfo{deepLine}
-									dnvalue, dnerr := tempSP.parseArrayFromLine(deepLine, deepLine.indent)
-									if dnerr == nil {
-										deepNested[dnkey] = dnvalue
-									}
-									continue
-								}
-								if dnerr := dnp.expect(':'); dnerr == nil {
-									dnp.skipWhitespace()
-									dnremaining := dnp.input[dnp.pos:]
-									dnvalue, dnerr := parseValue(dnremaining)
-									if dnerr == nil {
-										deepNested[dnkey] = dnvalue
-									}
-								}
-							}
-							nestedResult[nkey] = deepNested
-							k = m
-							continue
-						} else {
-							nestedResult[nkey] = map[string]Value{}
-						}
-					} else {
-						nvalue, nerr := parseValue(nremaining)
-						if nerr != nil {
-							k++
-							continue
-						}
-						nestedResult[nkey] = nvalue
-					}
-					k++
-				}
-				result[key] = nestedResult
-				i = j
-				continue
-			} else {
-				result[key] = map[string]Value{}
-			}
-		} else {
-			// Parse inline value - may be array or primitive
-			value, err := parseValue(remaining)
+			value, nextIdx, err := sp.parseNestedValue(lines, i, line.indent, key, firstKey)
 			if err != nil {
-				i++
-				continue
+				return err
 			}
 			result[key] = value
+			i = nextIdx
+		} else {
+			if value, err := parseValue(remaining); err == nil {
+				result[key] = value
+			}
+			i++
 		}
-		i++
 	}
 
-	if len(result) == 0 {
-		return parseValue(content)
-	}
-
-	return result, nil
+	return nil
 }
+
+// parseNestedArray parses a nested array within list item lines.
+func (sp *structuralParser) parseNestedArray(lines []lineInfo, startIdx, currentIndent int) (Value, int, error) {
+	line := lines[startIdx]
+	tempSP := newStructuralParser(line.content, sp.opts)
+	tempSP.lines = []lineInfo{line}
+	tempSP.pos = 0
+
+	// Collect nested lines
+	j := startIdx + 1
+	for j < len(lines) {
+		nextLine := lines[j]
+		if nextLine.isBlank {
+			j++
+			continue
+		}
+		if nextLine.indent <= currentIndent {
+			break
+		}
+		tempSP.lines = append(tempSP.lines, nextLine)
+		j++
+	}
+
+	value, err := tempSP.parseArrayFromLine(line, currentIndent)
+	return value, j, err
+}
+
+// parseNestedValue parses nested value with multi-level support.
+func (sp *structuralParser) parseNestedValue(lines []lineInfo, startIdx, currentIndent int, key, firstKey string) (Value, int, error) {
+	nestedLines := collectNestedLines(lines, startIdx+1, currentIndent)
+
+	if len(nestedLines) == 0 {
+		return map[string]Value{}, startIdx + 1, nil
+	}
+
+	// Check nesting depth limit
+	if len(nestedLines) > 100 {
+		return nil, 0, &DecodeError{Message: "nesting depth exceeded limit"}
+	}
+
+	// Special handling for firstKey wrapper
+	if key == firstKey && firstKey != "" {
+		tempSP := newStructuralParser("", sp.opts)
+		tempSP.lines = nestedLines
+		tempSP.pos = 0
+		nestedObj, err := tempSP.parseObject(nestedLines[0].indent, 0)
+		return nestedObj, startIdx + 1 + len(nestedLines), err
+	}
+
+	// Parse nested content recursively
+	nestedResult, err := sp.parseNestedContent(nestedLines)
+	return nestedResult, startIdx + 1 + len(nestedLines), err
+}
+
+// collectNestedLines collects lines with greater indent.
+func collectNestedLines(lines []lineInfo, startIdx, currentIndent int) []lineInfo {
+	nestedLines := []lineInfo{}
+	for j := startIdx; j < len(lines); j++ {
+		line := lines[j]
+		if line.isBlank {
+			continue
+		}
+		if line.indent <= currentIndent {
+			break
+		}
+		nestedLines = append(nestedLines, line)
+	}
+	return nestedLines
+}
+
+// parseNestedContent parses nested content with support for arrays and objects.
+func (sp *structuralParser) parseNestedContent(nestedLines []lineInfo) (map[string]Value, error) {
+	nestedResult := make(map[string]Value)
+	k := 0
+
+	for k < len(nestedLines) {
+		nestedLine := nestedLines[k]
+		np := newParser(nestedLine.content)
+		nkey, nerr := np.parseKey()
+		if nerr != nil {
+			k++
+			continue
+		}
+
+		// Handle nested arrays
+		if np.peek() == '[' {
+			value, nextIdx, err := sp.parseNestedArrayInContent(nestedLines, k, nestedLine.indent)
+			if err != nil {
+				k++
+				continue
+			}
+			nestedResult[nkey] = value
+			k = nextIdx
+			continue
+		}
+
+		if nerr := np.expect(':'); nerr != nil {
+			k++
+			continue
+		}
+		np.skipWhitespace()
+		nremaining := np.input[np.pos:]
+
+		// Handle deeply nested objects or inline values
+		if nremaining == "" || strings.TrimSpace(nremaining) == "" {
+			deepNestedLines := collectNestedLines(nestedLines, k+1, nestedLine.indent)
+			if len(deepNestedLines) > 0 {
+				deepNested := sp.parseDeepNested(deepNestedLines)
+				nestedResult[nkey] = deepNested
+				k += 1 + len(deepNestedLines)
+			} else {
+				nestedResult[nkey] = map[string]Value{}
+				k++
+			}
+		} else {
+			if nvalue, nerr := parseValue(nremaining); nerr == nil {
+				nestedResult[nkey] = nvalue
+			}
+			k++
+		}
+	}
+
+	return nestedResult, nil
+}
+
+// parseNestedArrayInContent parses nested array within content.
+func (sp *structuralParser) parseNestedArrayInContent(nestedLines []lineInfo, startIdx, nestedIndent int) (Value, int, error) {
+	nestedLine := nestedLines[startIdx]
+	tempSP := newStructuralParser(nestedLine.content, sp.opts)
+	tempSP.lines = []lineInfo{nestedLine}
+	tempSP.pos = 0
+
+	m := startIdx + 1
+	for m < len(nestedLines) {
+		deepLine := nestedLines[m]
+		if deepLine.isBlank {
+			m++
+			continue
+		}
+		if deepLine.indent <= nestedIndent {
+			break
+		}
+		tempSP.lines = append(tempSP.lines, deepLine)
+		m++
+	}
+
+	nvalue, nerr := tempSP.parseArrayFromLine(nestedLine, nestedIndent)
+	return nvalue, m, nerr
+}
+
+// parseDeepNested parses deeply nested content.
+func (sp *structuralParser) parseDeepNested(deepNestedLines []lineInfo) map[string]Value {
+	deepNested := make(map[string]Value)
+	for _, deepLine := range deepNestedLines {
+		dnp := newParser(deepLine.content)
+		dnkey, dnerr := dnp.parseKey()
+		if dnerr != nil {
+			continue
+		}
+		if dnp.peek() == '[' {
+			tempSP := newStructuralParser(deepLine.content, sp.opts)
+			tempSP.lines = []lineInfo{deepLine}
+			if dnvalue, dnerr := tempSP.parseArrayFromLine(deepLine, deepLine.indent); dnerr == nil {
+				deepNested[dnkey] = dnvalue
+			}
+			continue
+		}
+		if dnerr := dnp.expect(':'); dnerr == nil {
+			dnp.skipWhitespace()
+			if dnvalue, dnerr := parseValue(dnp.input[dnp.pos:]); dnerr == nil {
+				deepNested[dnkey] = dnvalue
+			}
+		}
+	}
+	return deepNested
+}
+
 func (sp *structuralParser) parseArray(p *parser, baseIndent int) (Value, error) {
 	if err := p.expect('['); err != nil {
 		return nil, err
