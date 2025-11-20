@@ -226,64 +226,85 @@ func normalize(v Value) Value {
 		return normalizeFloat(val)
 
 	case []interface{}:
-		result := make([]Value, len(val))
-		for i, item := range val {
-			result[i] = normalize(item)
-		}
-		return result
+		return normalizeSlice(val)
 
 	case map[string]interface{}:
-		result := make(map[string]Value, len(val))
-		for k, item := range val {
-			result[k] = normalize(item)
-		}
-		return result
+		return normalizeMap(val)
 
 	case OrderedMap:
-		// Preserve OrderedMap and normalize its values
-		result := NewOrderedMap()
-		for _, k := range val.Keys() {
-			if v, ok := val.Get(k); ok {
-				result.Set(k, normalize(v))
-			}
-		}
-		return *result
+		return normalizeOrderedMap(&val)
 
 	case *OrderedMap:
-		// Preserve OrderedMap and normalize its values
-		result := NewOrderedMap()
-		for _, k := range val.Keys() {
-			if v, ok := val.Get(k); ok {
-				result.Set(k, normalize(v))
-			}
-		}
-		return *result
+		return normalizeOrderedMap(val)
 
 	default:
-		// Handle reflection-based conversion for other types
-		rv := reflect.ValueOf(v)
-		switch rv.Kind() {
-		case reflect.Slice, reflect.Array:
-			length := rv.Len()
-			result := make([]Value, length)
-			for i := 0; i < length; i++ {
-				result[i] = normalize(rv.Index(i).Interface())
-			}
-			return result
+		return normalizeReflection(v)
+	}
+}
 
-		case reflect.Map:
-			result := make(map[string]Value)
-			for _, k := range rv.MapKeys() {
-				key := k.String()
-				result[key] = normalize(rv.MapIndex(k).Interface())
-			}
-			return result
+// normalizeSlice normalizes a slice of values.
+func normalizeSlice(slice []interface{}) Value {
+	result := make([]Value, len(slice))
+	for i, item := range slice {
+		result[i] = normalize(item)
+	}
+	return result
+}
 
-		default:
-			// Unsupported type, return nil
-			return nil
+// normalizeMap normalizes a map[string]interface{}.
+func normalizeMap(m map[string]interface{}) Value {
+	result := make(map[string]Value, len(m))
+	for k, item := range m {
+		result[k] = normalize(item)
+	}
+	return result
+}
+
+// normalizeOrderedMap normalizes an OrderedMap.
+func normalizeOrderedMap(om *OrderedMap) Value {
+	result := NewOrderedMap()
+	for _, k := range om.Keys() {
+		if v, ok := om.Get(k); ok {
+			result.Set(k, normalize(v))
 		}
 	}
+	return *result
+}
+
+// normalizeReflection handles normalization using reflection for non-standard types.
+func normalizeReflection(v Value) Value {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		return normalizeReflectSlice(rv)
+
+	case reflect.Map:
+		return normalizeReflectMap(rv)
+
+	default:
+		// Unsupported type, return nil
+		return nil
+	}
+}
+
+// normalizeReflectSlice normalizes a slice using reflection.
+func normalizeReflectSlice(rv reflect.Value) Value {
+	length := rv.Len()
+	result := make([]Value, length)
+	for i := 0; i < length; i++ {
+		result[i] = normalize(rv.Index(i).Interface())
+	}
+	return result
+}
+
+// normalizeReflectMap normalizes a map using reflection.
+func normalizeReflectMap(rv reflect.Value) Value {
+	result := make(map[string]Value)
+	for _, k := range rv.MapKeys() {
+		key := k.String()
+		result[key] = normalize(rv.MapIndex(k).Interface())
+	}
+	return result
 }
 
 // normalizeFloat handles special float values.
