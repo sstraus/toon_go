@@ -259,167 +259,185 @@ func encodeListArray(w *writer, key string, v Value, depth int, opts *EncodeOpti
 
 // encodeListItem encodes a single item in a list array.
 func encodeListItem(w *writer, item Value, depth int, opts *EncodeOptions, isFirst bool) error {
-	// Handle primitives
 	if isPrimitive(item) {
-		encoded, err := encodePrimitive(item, opts.Delimiter)
-		if err != nil {
-			return err
-		}
-		w.push(listItemPrefix+encoded, depth)
-		return nil
+		return encodeListItemPrimitive(w, item, depth, opts)
 	}
 
-	// Handle arrays
 	if isList(item) {
-		rv := reflect.ValueOf(item)
-		length := rv.Len()
-
-		if length == 0 {
-			lengthMarker := formatLengthMarker(0, opts.LengthMarker)
-			delimiterMarker := ""
-			if opts.Delimiter != comma {
-				delimiterMarker = opts.Delimiter
-			}
-			// Empty array syntax without space
-			w.push(listItemPrefix+openBracket+lengthMarker+delimiterMarker+closeBracket+colon, depth)
-			return nil
-		}
-
-		// Check if all primitives for inline format
-		if allPrimitives(item) {
-			lengthMarker := formatLengthMarker(length, opts.LengthMarker)
-			delimiterMarker := ""
-			if opts.Delimiter != comma {
-				delimiterMarker = opts.Delimiter
-			}
-
-			values := make([]string, length)
-			for i := 0; i < length; i++ {
-				val := rv.Index(i).Interface()
-				encoded, err := encodePrimitive(val, opts.Delimiter)
-				if err != nil {
-					return err
-				}
-				values[i] = encoded
-			}
-			joined := strings.Join(values, opts.Delimiter)
-
-			line := listItemPrefix + openBracket + lengthMarker + delimiterMarker + closeBracket + colon + space + joined
-			w.push(line, depth)
-			return nil
-		}
-
-		// Complex nested array - recursively encode with full multi-level support
-		lengthMarker := formatLengthMarker(length, opts.LengthMarker)
-		delimiterMarker := ""
-		if opts.Delimiter != comma {
-			delimiterMarker = opts.Delimiter
-		}
-
-		header := listItemPrefix + openBracket + lengthMarker + delimiterMarker + closeBracket + colon
-		w.push(header, depth)
-
-		// Recursively encode nested items supporting multi-level arrays and objects
-		for i := 0; i < length; i++ {
-			nested := rv.Index(i).Interface()
-			// Full recursive encoding for any depth of nesting
-			if err := encodeListItem(w, nested, depth+1, opts, false); err != nil {
-				return err
-			}
-		}
-
-		return nil
+		return encodeListItemArray(w, item, depth, opts)
 	}
 
-	// Handle maps
 	if isMap(item) {
-		// Check if it's an OrderedMap - if so, preserve its key order
-		var keys []string
-		var itemRv reflect.Value
-
-		if orderedMap, ok := item.(OrderedMap); ok {
-			// Use the OrderedMap's preserved key order
-			keys = orderedMap.Keys()
-			itemRv = reflect.ValueOf(orderedMap.Values())
-		} else if orderedMapPtr, ok := item.(*OrderedMap); ok {
-			// Handle pointer to OrderedMap
-			keys = orderedMapPtr.Keys()
-			itemRv = reflect.ValueOf(orderedMapPtr.Values())
-		} else {
-			// Regular map - extract keys and sort them
-			itemRv = reflect.ValueOf(item)
-			keys = make([]string, 0, itemRv.Len())
-			for _, k := range itemRv.MapKeys() {
-				keys = append(keys, k.String())
-			}
-			// Sort keys, but put arrays first in list items
-			sortKeysWithArraysFirst(keys, itemRv)
-		}
-
-		// Calculate alignment offset for subsequent keys (list marker "- " is 2 chars)
-		alignmentOffset := 2
-
-		for idx, k := range keys {
-			mapKey := reflect.ValueOf(k)
-			val := itemRv.MapIndex(mapKey).Interface()
-			encodedKey := encodeKey(k)
-
-			// First entry gets the list marker
-			if idx == 0 {
-				if isPrimitive(val) {
-					encoded, err := encodePrimitive(val, opts.Delimiter)
-					if err != nil {
-						return err
-					}
-					w.push(listItemPrefix+encodedKey+colon+space+encoded, depth)
-				} else if isList(val) {
-					// Array on hyphen line - encode inline without line break
-					if err := encodeArray(w, listItemPrefix+encodedKey, val, depth, opts); err != nil {
-						return err
-					}
-				} else {
-					// Complex value (object) - proper nesting support
-					w.push(listItemPrefix+encodedKey+colon, depth)
-					if err := encodeValue(w, "", val, depth+1, opts); err != nil {
-						return err
-					}
-				}
-			} else {
-				// Subsequent entries are indented with alignment offset to match first key
-				baseIndent := depth * opts.Indent
-				alignedLine := strings.Repeat(" ", baseIndent+alignmentOffset) + encodedKey
-
-				// Calculate effective depth for aligned content
-				// alignedLine has (depth * Indent + alignmentOffset) spaces
-				// So effective depth = depth + (alignmentOffset / Indent)
-				effectiveDepth := depth + alignmentOffset/opts.Indent
-
-				if isPrimitive(val) {
-					encoded, err := encodePrimitive(val, opts.Delimiter)
-					if err != nil {
-						return err
-					}
-					w.pushRaw(newline + alignedLine + colon + space + encoded)
-				} else if isList(val) {
-					// Array field - encode inline on same line
-					// Don't use pushRaw for line break, let encodeArray handle it
-					if err := encodeArray(w, alignedLine, val, depth, opts); err != nil {
-						return err
-					}
-				} else {
-					// Complex value (object) - proper nesting with correct depth
-					w.pushRaw(newline + alignedLine + colon)
-					if err := encodeValue(w, "", val, effectiveDepth+1, opts); err != nil {
-						return err
-					}
-				}
-			}
-		}
-
-		return nil
+		return encodeListItemMap(w, item, depth, opts)
 	}
 
 	return &EncodeError{Message: "unsupported list item type", Value: item}
+}
+
+// encodeListItemPrimitive encodes a primitive value as a list item.
+func encodeListItemPrimitive(w *writer, item Value, depth int, opts *EncodeOptions) error {
+	encoded, err := encodePrimitive(item, opts.Delimiter)
+	if err != nil {
+		return err
+	}
+	w.push(listItemPrefix+encoded, depth)
+	return nil
+}
+
+// encodeListItemArray encodes an array as a list item.
+func encodeListItemArray(w *writer, item Value, depth int, opts *EncodeOptions) error {
+	rv := reflect.ValueOf(item)
+	length := rv.Len()
+
+	delimiterMarker := ""
+	if opts.Delimiter != comma {
+		delimiterMarker = opts.Delimiter
+	}
+
+	// Empty array
+	if length == 0 {
+		lengthMarker := formatLengthMarker(0, opts.LengthMarker)
+		w.push(listItemPrefix+openBracket+lengthMarker+delimiterMarker+closeBracket+colon, depth)
+		return nil
+	}
+
+	// Inline array (all primitives)
+	if allPrimitives(item) {
+		return encodeListItemInlineArray(w, rv, length, delimiterMarker, depth, opts)
+	}
+
+	// Nested array
+	return encodeListItemNestedArray(w, rv, length, delimiterMarker, depth, opts)
+}
+
+// encodeListItemInlineArray encodes an inline primitive array.
+func encodeListItemInlineArray(w *writer, rv reflect.Value, length int, delimiterMarker string, depth int, opts *EncodeOptions) error {
+	lengthMarker := formatLengthMarker(length, opts.LengthMarker)
+
+	values := make([]string, length)
+	for i := 0; i < length; i++ {
+		val := rv.Index(i).Interface()
+		encoded, err := encodePrimitive(val, opts.Delimiter)
+		if err != nil {
+			return err
+		}
+		values[i] = encoded
+	}
+	joined := strings.Join(values, opts.Delimiter)
+
+	line := listItemPrefix + openBracket + lengthMarker + delimiterMarker + closeBracket + colon + space + joined
+	w.push(line, depth)
+	return nil
+}
+
+// encodeListItemNestedArray encodes a complex nested array.
+func encodeListItemNestedArray(w *writer, rv reflect.Value, length int, delimiterMarker string, depth int, opts *EncodeOptions) error {
+	lengthMarker := formatLengthMarker(length, opts.LengthMarker)
+	header := listItemPrefix + openBracket + lengthMarker + delimiterMarker + closeBracket + colon
+	w.push(header, depth)
+
+	// Recursively encode nested items
+	for i := 0; i < length; i++ {
+		nested := rv.Index(i).Interface()
+		if err := encodeListItem(w, nested, depth+1, opts, false); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// encodeListItemMap encodes a map as a list item.
+func encodeListItemMap(w *writer, item Value, depth int, opts *EncodeOptions) error {
+	keys, itemRv := extractMapKeysAndValues(item)
+
+	// Calculate alignment offset for subsequent keys (list marker "- " is 2 chars)
+	alignmentOffset := 2
+
+	for idx, k := range keys {
+		mapKey := reflect.ValueOf(k)
+		val := itemRv.MapIndex(mapKey).Interface()
+		encodedKey := encodeKey(k)
+
+		if idx == 0 {
+			if err := encodeListItemMapFirstKey(w, encodedKey, val, depth, opts); err != nil {
+				return err
+			}
+		} else {
+			if err := encodeListItemMapSubsequentKey(w, encodedKey, val, depth, alignmentOffset, opts); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractMapKeysAndValues extracts keys and reflected values from a map.
+func extractMapKeysAndValues(item Value) ([]string, reflect.Value) {
+	var keys []string
+	var itemRv reflect.Value
+
+	if orderedMap, ok := item.(OrderedMap); ok {
+		keys = orderedMap.Keys()
+		itemRv = reflect.ValueOf(orderedMap.Values())
+	} else if orderedMapPtr, ok := item.(*OrderedMap); ok {
+		keys = orderedMapPtr.Keys()
+		itemRv = reflect.ValueOf(orderedMapPtr.Values())
+	} else {
+		itemRv = reflect.ValueOf(item)
+		keys = make([]string, 0, itemRv.Len())
+		for _, k := range itemRv.MapKeys() {
+			keys = append(keys, k.String())
+		}
+		sortKeysWithArraysFirst(keys, itemRv)
+	}
+
+	return keys, itemRv
+}
+
+// encodeListItemMapFirstKey encodes the first key-value pair in a map list item.
+func encodeListItemMapFirstKey(w *writer, encodedKey string, val Value, depth int, opts *EncodeOptions) error {
+	if isPrimitive(val) {
+		encoded, err := encodePrimitive(val, opts.Delimiter)
+		if err != nil {
+			return err
+		}
+		w.push(listItemPrefix+encodedKey+colon+space+encoded, depth)
+		return nil
+	}
+
+	if isList(val) {
+		return encodeArray(w, listItemPrefix+encodedKey, val, depth, opts)
+	}
+
+	// Complex value (object)
+	w.push(listItemPrefix+encodedKey+colon, depth)
+	return encodeValue(w, "", val, depth+1, opts)
+}
+
+// encodeListItemMapSubsequentKey encodes subsequent key-value pairs in a map list item.
+func encodeListItemMapSubsequentKey(w *writer, encodedKey string, val Value, depth, alignmentOffset int, opts *EncodeOptions) error {
+	baseIndent := depth * opts.Indent
+	alignedLine := strings.Repeat(" ", baseIndent+alignmentOffset) + encodedKey
+	effectiveDepth := depth + alignmentOffset/opts.Indent
+
+	if isPrimitive(val) {
+		encoded, err := encodePrimitive(val, opts.Delimiter)
+		if err != nil {
+			return err
+		}
+		w.pushRaw(newline + alignedLine + colon + space + encoded)
+		return nil
+	}
+
+	if isList(val) {
+		return encodeArray(w, alignedLine, val, depth, opts)
+	}
+
+	// Complex value (object)
+	w.pushRaw(newline + alignedLine + colon)
+	return encodeValue(w, "", val, effectiveDepth+1, opts)
 }
 
 // formatLengthMarker formats the length marker with optional prefix.
