@@ -183,7 +183,7 @@ func sortKeysWithArraysFirst(keys []string, rv reflect.Value) {
 	// Separate array keys from non-array keys
 	arrayKeys := []string{}
 	otherKeys := []string{}
-	
+
 	for _, k := range keys {
 		mapKey := reflect.ValueOf(k)
 		val := rv.MapIndex(mapKey).Interface()
@@ -193,11 +193,11 @@ func sortKeysWithArraysFirst(keys []string, rv reflect.Value) {
 			otherKeys = append(otherKeys, k)
 		}
 	}
-	
+
 	// Sort each group
 	sortStrings(arrayKeys)
 	sortStrings(otherKeys)
-	
+
 	// Rebuild keys with arrays first
 	copy(keys, arrayKeys)
 	copy(keys[len(arrayKeys):], otherKeys)

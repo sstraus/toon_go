@@ -96,14 +96,14 @@ func detectArrayFormat(v Value) arrayFormat {
 // encodeEmptyArray encodes an empty array.
 func encodeEmptyArray(w *writer, key string, depth int, opts *EncodeOptions) error {
 	lengthMarker := formatLengthMarker(0, opts.LengthMarker)
-	
+
 	if key != "" {
 		// Empty array syntax: key[0]: (no space after colon)
 		w.push(key+openBracket+lengthMarker+closeBracket+colon, depth)
 	} else {
 		w.push(openBracket+lengthMarker+closeBracket+colon, depth)
 	}
-	
+
 	return nil
 }
 
@@ -111,7 +111,7 @@ func encodeEmptyArray(w *writer, key string, depth int, opts *EncodeOptions) err
 func encodeInlineArray(w *writer, key string, v Value, depth int, opts *EncodeOptions) error {
 	rv := reflect.ValueOf(v)
 	length := rv.Len()
-	
+
 	lengthMarker := formatLengthMarker(length, opts.LengthMarker)
 	delimiterMarker := ""
 	if opts.Delimiter != comma {
@@ -146,7 +146,7 @@ func encodeInlineArray(w *writer, key string, v Value, depth int, opts *EncodeOp
 func encodeTabularArray(w *writer, key string, v Value, depth int, opts *EncodeOptions) error {
 	rv := reflect.ValueOf(v)
 	length := rv.Len()
-	
+
 	if length == 0 {
 		return encodeEmptyArray(w, key, depth, opts)
 	}
@@ -184,13 +184,13 @@ func encodeTabularArray(w *writer, key string, v Value, depth int, opts *EncodeO
 
 	var header string
 	if key != "" {
-		header = key + openBracket + lengthMarker + delimiterMarker + closeBracket + 
+		header = key + openBracket + lengthMarker + delimiterMarker + closeBracket +
 			openBrace + fields + closeBrace + colon
 	} else {
-		header = openBracket + lengthMarker + delimiterMarker + closeBracket + 
+		header = openBracket + lengthMarker + delimiterMarker + closeBracket +
 			openBrace + fields + closeBrace + colon
 	}
-	
+
 	w.push(header, depth)
 
 	// Format data rows
@@ -230,7 +230,7 @@ func encodeTabularArray(w *writer, key string, v Value, depth int, opts *EncodeO
 func encodeListArray(w *writer, key string, v Value, depth int, opts *EncodeOptions) error {
 	rv := reflect.ValueOf(v)
 	length := rv.Len()
-	
+
 	lengthMarker := formatLengthMarker(length, opts.LengthMarker)
 	delimiterMarker := ""
 	if opts.Delimiter != comma {
@@ -273,7 +273,7 @@ func encodeListItem(w *writer, item Value, depth int, opts *EncodeOptions, isFir
 	if isList(item) {
 		rv := reflect.ValueOf(item)
 		length := rv.Len()
-		
+
 		if length == 0 {
 			lengthMarker := formatLengthMarker(0, opts.LengthMarker)
 			delimiterMarker := ""
@@ -284,7 +284,7 @@ func encodeListItem(w *writer, item Value, depth int, opts *EncodeOptions, isFir
 			w.push(listItemPrefix+openBracket+lengthMarker+delimiterMarker+closeBracket+colon, depth)
 			return nil
 		}
-		
+
 		// Check if all primitives for inline format
 		if allPrimitives(item) {
 			lengthMarker := formatLengthMarker(length, opts.LengthMarker)
@@ -292,7 +292,7 @@ func encodeListItem(w *writer, item Value, depth int, opts *EncodeOptions, isFir
 			if opts.Delimiter != comma {
 				delimiterMarker = opts.Delimiter
 			}
-			
+
 			values := make([]string, length)
 			for i := 0; i < length; i++ {
 				val := rv.Index(i).Interface()
@@ -303,22 +303,22 @@ func encodeListItem(w *writer, item Value, depth int, opts *EncodeOptions, isFir
 				values[i] = encoded
 			}
 			joined := strings.Join(values, opts.Delimiter)
-			
+
 			line := listItemPrefix + openBracket + lengthMarker + delimiterMarker + closeBracket + colon + space + joined
 			w.push(line, depth)
 			return nil
 		}
-		
+
 		// Complex nested array - recursively encode with full multi-level support
 		lengthMarker := formatLengthMarker(length, opts.LengthMarker)
 		delimiterMarker := ""
 		if opts.Delimiter != comma {
 			delimiterMarker = opts.Delimiter
 		}
-		
+
 		header := listItemPrefix + openBracket + lengthMarker + delimiterMarker + closeBracket + colon
 		w.push(header, depth)
-		
+
 		// Recursively encode nested items supporting multi-level arrays and objects
 		for i := 0; i < length; i++ {
 			nested := rv.Index(i).Interface()
@@ -327,7 +327,7 @@ func encodeListItem(w *writer, item Value, depth int, opts *EncodeOptions, isFir
 				return err
 			}
 		}
-		
+
 		return nil
 	}
 
@@ -358,12 +358,12 @@ func encodeListItem(w *writer, item Value, depth int, opts *EncodeOptions, isFir
 
 		// Calculate alignment offset for subsequent keys (list marker "- " is 2 chars)
 		alignmentOffset := 2
-		
+
 		for idx, k := range keys {
 			mapKey := reflect.ValueOf(k)
 			val := itemRv.MapIndex(mapKey).Interface()
 			encodedKey := encodeKey(k)
-			
+
 			// First entry gets the list marker
 			if idx == 0 {
 				if isPrimitive(val) {
@@ -415,7 +415,7 @@ func encodeListItem(w *writer, item Value, depth int, opts *EncodeOptions, isFir
 				}
 			}
 		}
-		
+
 		return nil
 	}
 

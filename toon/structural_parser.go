@@ -36,12 +36,12 @@ func newStructuralParser(input string, opts *DecodeOptions) *structuralParser {
 func preprocessLines(input string) []lineInfo {
 	rawLines := strings.Split(input, "\n")
 	lines := make([]lineInfo, 0, len(rawLines))
-	
+
 	for i, line := range rawLines {
 		indent := calculateIndent(line)
 		content := strings.TrimLeft(line, " \t")
 		isBlank := strings.TrimSpace(line) == ""
-		
+
 		lines = append(lines, lineInfo{
 			content:    content,
 			indent:     indent,
@@ -50,12 +50,12 @@ func preprocessLines(input string) []lineInfo {
 			isBlank:    isBlank,
 		})
 	}
-	
+
 	// Remove trailing blank lines
 	for len(lines) > 0 && lines[len(lines)-1].isBlank {
 		lines = lines[:len(lines)-1]
 	}
-	
+
 	return lines
 }
 
@@ -80,20 +80,20 @@ func (sp *structuralParser) parse() (Value, error) {
 	if len(sp.lines) == 0 {
 		return map[string]Value{}, nil
 	}
-	
+
 	// Validate indentation in strict mode
 	if sp.opts.Strict {
 		if err := sp.validateIndentation(); err != nil {
 			return nil, err
 		}
 	}
-	
+
 	// Detect root type
 	rootType, err := sp.detectRootType()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	switch rootType {
 	case rootTypeArray:
 		return sp.parseRootArray()
@@ -112,13 +112,13 @@ func (sp *structuralParser) validateIndentation() error {
 		if line.isBlank {
 			continue
 		}
-		
+
 		// Check for tabs in indentation
 		leadingSpace := ""
 		for i := 0; i < len(line.original) && (line.original[i] == ' ' || line.original[i] == '\t'); i++ {
 			leadingSpace += string(line.original[i])
 		}
-		
+
 		if strings.Contains(leadingSpace, "\t") {
 			return &DecodeError{
 				Message: "tab characters not allowed in indentation (strict mode)",
@@ -126,7 +126,7 @@ func (sp *structuralParser) validateIndentation() error {
 				Context: line.original,
 			}
 		}
-		
+
 		// Check if indent is multiple of indent_size
 		if line.indent > 0 && line.indent%sp.opts.IndentSize != 0 {
 			return &DecodeError{
@@ -144,14 +144,14 @@ func (sp *structuralParser) detectRootType() (rootType, error) {
 	if len(sp.lines) == 0 {
 		return rootTypeObject, nil
 	}
-	
+
 	firstLine := sp.lines[0]
-	
+
 	// Check for root array patterns
 	if strings.HasPrefix(firstLine.content, "[") {
 		return rootTypeArray, nil
 	}
-	
+
 	// Check if single line (primitive)
 	if len(sp.lines) == 1 {
 		// If starts with quote, check if it's a quoted key (has : after closing quote)
@@ -187,7 +187,7 @@ func (sp *structuralParser) detectRootType() (rootType, error) {
 			// Unterminated quote - treat as primitive (will error during parse)
 			return rootTypePrimitive, nil
 		}
-		
+
 		// Check if it has a colon (key-value pair = object)
 		if strings.Contains(firstLine.content, ":") {
 			// If line ends with colon (empty value), it's an object
@@ -208,7 +208,7 @@ func (sp *structuralParser) detectRootType() (rootType, error) {
 		// No colon or empty after colon (no key) = primitive
 		return rootTypePrimitive, nil
 	}
-	
+
 	// Multiple lines = object
 	return rootTypeObject, nil
 }
@@ -218,7 +218,7 @@ func (sp *structuralParser) parseRootPrimitive() (Value, error) {
 	if len(sp.lines) == 0 {
 		return nil, &DecodeError{Message: "empty input"}
 	}
-	
+
 	line := sp.lines[0]
 	return parseValue(line.content)
 }
@@ -232,34 +232,34 @@ func (sp *structuralParser) parseRootArray() (Value, error) {
 func (sp *structuralParser) parseObject(baseIndent int, startPos int) (Value, error) {
 	result := make(map[string]Value)
 	sp.pos = startPos
-	
+
 	for sp.pos < len(sp.lines) {
 		line := sp.lines[sp.pos]
-		
+
 		// Skip blank lines in objects - allowed between fields
 		// Blank lines within arrays are handled by array parsing functions
 		if line.isBlank {
 			sp.pos++
 			continue
 		}
-		
+
 		// Check if we've moved to a different indent level
 		if line.indent < baseIndent {
 			break
 		}
-		
+
 		if line.indent > baseIndent {
 			// Skip lines that are more indented (they'll be parsed as part of nested values)
 			sp.pos++
 			continue
 		}
-		
+
 		// Parse key-value pair
 		key, wasQuoted, value, err := sp.parseKeyValueLineWithQuoteInfo(line, baseIndent)
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// Apply path expansion if enabled, key contains dots, was not quoted, and all segments are valid identifiers
 		if sp.opts.ExpandPaths == "safe" && !wasQuoted && strings.Contains(key, ".") && isExpandablePath(key) {
 			if err := sp.expandDottedKey(key, value, result); err != nil {
@@ -282,7 +282,7 @@ func (sp *structuralParser) parseObject(baseIndent int, startPos int) (Value, er
 		}
 		sp.pos++
 	}
-	
+
 	return result, nil
 }
 
@@ -293,7 +293,7 @@ func (sp *structuralParser) expandDottedKey(path string, value Value, target map
 	if len(parts) == 0 {
 		return &DecodeError{Message: "empty path in expandDottedKey"}
 	}
-	
+
 	// Handle path ending with '.' (e.g., "data.") to create empty array
 	if parts[len(parts)-1] == "" {
 		// Remove trailing empty part
@@ -304,7 +304,7 @@ func (sp *structuralParser) expandDottedKey(path string, value Value, target map
 		// Set empty array as value
 		value = []interface{}{}
 	}
-	
+
 	// Single part - direct assignment
 	if len(parts) == 1 {
 		key := parts[0]
@@ -329,16 +329,16 @@ func (sp *structuralParser) expandDottedKey(path string, value Value, target map
 		target[key] = value
 		return nil
 	}
-	
+
 	// Multi-part path - recursive expansion
 	firstKey := parts[0]
 	remainingPath := strings.Join(parts[1:], ".")
-	
+
 	// Handle empty key segment
 	if firstKey == "" {
 		return &DecodeError{Message: "empty key segment in path"}
 	}
-	
+
 	// Get or create intermediate map
 	existing, exists := target[firstKey]
 	if !exists {
@@ -347,7 +347,7 @@ func (sp *structuralParser) expandDottedKey(path string, value Value, target map
 		target[firstKey] = nested
 		return sp.expandDottedKey(remainingPath, value, nested)
 	}
-	
+
 	// Existing value - check compatibility
 	nestedMap, isMap := existing.(map[string]Value)
 	if !isMap {
@@ -363,7 +363,7 @@ func (sp *structuralParser) expandDottedKey(path string, value Value, target map
 		target[firstKey] = nested
 		return sp.expandDottedKey(remainingPath, value, nested)
 	}
-	
+
 	// Recurse into existing map
 	return sp.expandDottedKey(remainingPath, value, nestedMap)
 }
@@ -398,26 +398,26 @@ func areValuesCompatible(v1, v2 Value) bool {
 	if v1 == nil || v2 == nil {
 		return false
 	}
-	
+
 	// Check if both are maps
 	_, isMap1 := v1.(map[string]Value)
 	_, isMap2 := v2.(map[string]Value)
 	if isMap1 && isMap2 {
 		return true
 	}
-	
+
 	// Check if both are arrays
 	_, isArray1 := v1.([]Value)
 	_, isArray2 := v2.([]Value)
 	if isArray1 && isArray2 {
 		return true
 	}
-	
+
 	// Different types - incompatible
 	if (isMap1 || isArray1) != (isMap2 || isArray2) {
 		return false
 	}
-	
+
 	// Both primitives - compatible
 	return !isMap1 && !isArray1 && !isMap2 && !isArray2
 }
@@ -440,47 +440,47 @@ func isValidIdentifier(s string) bool {
 	if len(s) == 0 {
 		return false
 	}
-	
+
 	// First character: letter or underscore
 	first := rune(s[0])
 	if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_') {
 		return false
 	}
-	
+
 	// Remaining characters: letter, digit, or underscore
 	for _, ch := range s[1:] {
 		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
 // parseKeyValueLine parses a single key-value line.
 func (sp *structuralParser) parseKeyValueLine(line lineInfo, baseIndent int) (string, Value, error) {
 	p := newParser(line.content)
-	
+
 	// Parse key
 	key, err := p.parseKey()
 	if err != nil {
 		return "", nil, err
 	}
-	
+
 	// Check for array marker
 	if p.peek() == '[' {
 		// This is an array
 		value, err := sp.parseArrayFromLine(line, baseIndent)
 		return key, value, err
 	}
-	
+
 	// Expect colon
 	if err := p.expect(':'); err != nil {
 		return "", nil, err
 	}
-	
+
 	p.skipWhitespace()
-	
+
 	// Check if value is on same line or next lines
 	if p.isEOF() || p.peek() == '\n' {
 		// Value is on next lines (nested object or array)
@@ -489,14 +489,14 @@ func (sp *structuralParser) parseKeyValueLine(line lineInfo, baseIndent int) (st
 			// Empty value
 			return key, nil, nil
 		}
-		
+
 		nextLine := sp.lines[sp.pos]
 		if nextLine.indent <= baseIndent {
 			// Empty value
 			sp.pos--
 			return key, nil, nil
 		}
-		
+
 		// Parse nested value
 		value, err := sp.parseObject(nextLine.indent, sp.pos)
 		if err != nil {
@@ -505,41 +505,41 @@ func (sp *structuralParser) parseKeyValueLine(line lineInfo, baseIndent int) (st
 		sp.pos-- // Will be incremented in main loop
 		return key, value, nil
 	}
-	
+
 	// Parse inline value
 	remaining := p.input[p.pos:]
 	value, err := parseValue(remaining)
 	if err != nil {
 		return "", nil, err
 	}
-	
+
 	return key, value, nil
 }
 
 // parseKeyValueLineWithQuoteInfo parses a single key-value line and returns quote info.
 func (sp *structuralParser) parseKeyValueLineWithQuoteInfo(line lineInfo, baseIndent int) (string, bool, Value, error) {
 	p := newParser(line.content)
-	
+
 	// Parse key with quote information
 	key, wasQuoted, err := p.parseKeyWithQuoteInfo()
 	if err != nil {
 		return "", false, nil, err
 	}
-	
+
 	// Check for array marker
 	if p.peek() == '[' {
 		// This is an array
 		value, err := sp.parseArrayFromLine(line, baseIndent)
 		return key, wasQuoted, value, err
 	}
-	
+
 	// Expect colon
 	if err := p.expect(':'); err != nil {
 		return "", false, nil, err
 	}
-	
+
 	p.skipWhitespace()
-	
+
 	// Check if value is on same line or next lines
 	if p.isEOF() || p.peek() == '\n' {
 		// Value is on next lines (nested object or array)
@@ -548,7 +548,7 @@ func (sp *structuralParser) parseKeyValueLineWithQuoteInfo(line lineInfo, baseIn
 			// Empty value - return empty map for object key
 			return key, wasQuoted, map[string]Value{}, nil
 		}
-		
+
 		nextLine := sp.lines[sp.pos]
 		if nextLine.indent <= baseIndent {
 			// Empty value - return empty map for object key
@@ -558,7 +558,7 @@ func (sp *structuralParser) parseKeyValueLineWithQuoteInfo(line lineInfo, baseIn
 			}
 			return key, wasQuoted, map[string]Value{}, nil
 		}
-		
+
 		// Parse nested value
 		value, err := sp.parseObject(nextLine.indent, sp.pos)
 		if err != nil {
@@ -567,7 +567,7 @@ func (sp *structuralParser) parseKeyValueLineWithQuoteInfo(line lineInfo, baseIn
 		sp.pos-- // Will be incremented in main loop
 		return key, wasQuoted, value, nil
 	}
-	
+
 	// Parse inline value
 	remaining := p.input[p.pos:]
 	if strings.HasPrefix(remaining, "[") {
@@ -581,7 +581,7 @@ func (sp *structuralParser) parseKeyValueLineWithQuoteInfo(line lineInfo, baseIn
 	if err != nil {
 		return "", false, nil, err
 	}
-	
+
 	return key, wasQuoted, value, nil
 }
 
@@ -621,7 +621,7 @@ func (sp *structuralParser) parseArrayFromLine(line lineInfo, baseIndent int) (V
 	if err := p.expect('['); err != nil {
 		return nil, err
 	}
-	
+
 	// Parse length and delimiter marker together
 	lengthStr := ""
 	delimiter := ""
@@ -645,28 +645,28 @@ func (sp *structuralParser) parseArrayFromLine(line lineInfo, baseIndent int) (V
 			break
 		}
 	}
-	
+
 	if err := p.expect(']'); err != nil {
 		return nil, err
 	}
-	
+
 	// Check for tabular format {keys}
 	if p.peek() == '{' {
 		return sp.parseTabularArray(line, baseIndent, lengthStr, delimiter)
 	}
-	
+
 	if err := p.expect(':'); err != nil {
 		return nil, err
 	}
-	
+
 	p.skipWhitespace()
-	
+
 	// Check if values are inline or on next lines
 	if p.isEOF() || p.peek() == '\n' {
 		// Values on next lines (list format)
 		return sp.parseListArray(baseIndent, lengthStr, delimiter)
 	}
-	
+
 	// Inline array
 	return sp.parseInlineArray(p, lengthStr, delimiter)
 }
@@ -677,15 +677,15 @@ func (sp *structuralParser) parseInlineArray(p *parser, lengthStr string, delimi
 	if delimiter == "" {
 		delimiter = ","
 	}
-	
+
 	remaining := p.input[p.pos:]
-	
+
 	// Don't validate delimiter consistency here - commas in data are allowed with tab/pipe delimiters
 	// Only the splitRowByDelimiter function handles delimiter parsing correctly
-	
+
 	// Use splitRowByDelimiter to handle delimiters properly (respects quotes)
 	parts := sp.splitRowByDelimiter(remaining, delimiter)
-	
+
 	result := make([]Value, 0, len(parts))
 	for _, part := range parts {
 		trimmed := strings.TrimSpace(part)
@@ -695,7 +695,7 @@ func (sp *structuralParser) parseInlineArray(p *parser, lengthStr string, delimi
 		}
 		result = append(result, value)
 	}
-	
+
 	// Validate array length if specified
 	if lengthStr != "" && sp.opts.Strict {
 		// Extract numeric length from lengthStr
@@ -714,47 +714,47 @@ func (sp *structuralParser) parseInlineArray(p *parser, lengthStr string, delimi
 			}
 		}
 	}
-	
+
 	return result, nil
 }
 
 // parseTabularArray parses a tabular array format.
 func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, lengthStr string, delimiter string) (Value, error) {
 	p := newParser(line.content)
-	
+
 	// Skip to opening brace
 	for p.peek() != '{' && !p.isEOF() {
 		p.advance()
 	}
 	p.advance() // skip {
-	
+
 	// Use provided delimiter (tab/pipe) or default to comma
 	headerDelimiter := ","
 	if delimiter == "\t" || delimiter == "|" {
 		headerDelimiter = delimiter
 	}
-	
+
 	// Parse keys respecting quotes and delimiter
 	keys := []string{}
 	current := ""
 	inQuotes := false
 	escaped := false
-	
+
 	for p.peek() != '}' && !p.isEOF() {
 		ch := p.peek()
 		p.advance()
-		
+
 		if escaped {
 			current += string(ch)
 			escaped = false
 			continue
 		}
-		
+
 		if ch == '\\' && inQuotes {
 			escaped = true
 			continue
 		}
-		
+
 		if ch == '"' {
 			if !inQuotes {
 				inQuotes = true
@@ -766,7 +766,7 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 			}
 			continue
 		}
-		
+
 		if !inQuotes {
 			if ch == ' ' {
 				// Skip spaces outside quotes
@@ -781,15 +781,15 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 				continue
 			}
 		}
-		
+
 		current += string(ch)
 	}
-	
+
 	// Add last key if any
 	if current != "" {
 		keys = append(keys, strings.TrimSpace(current))
 	}
-	
+
 	// Parse data rows with delimiter-aware splitting
 	result := make([]Value, 0)
 	sp.pos++
@@ -819,7 +819,7 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 
 	for sp.pos < len(sp.lines) {
 		line := sp.lines[sp.pos]
-		
+
 		if line.isBlank {
 			if sp.opts.Strict {
 				return nil, &DecodeError{
@@ -849,7 +849,7 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 
 		// Parse row respecting quoted values
 		parts := sp.splitRowByDelimiter(line.content, headerDelimiter)
-		
+
 		if sp.opts.Strict && len(parts) != len(keys) {
 			return nil, &DecodeError{
 				Message: fmt.Sprintf("tabular array row has wrong number of values: expected %d, got %d", len(keys), len(parts)),
@@ -857,7 +857,7 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 				Context: line.original,
 			}
 		}
-		
+
 		row := make(map[string]Value)
 		for i, key := range keys {
 			if i < len(parts) {
@@ -868,12 +868,12 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 				row[key] = value
 			}
 		}
-		
+
 		result = append(result, row)
 		rowCount++
 		sp.pos++
 	}
-	
+
 	// Validate row count if length specified
 	if lengthStr != "" && sp.opts.Strict {
 		numStr := ""
@@ -891,7 +891,7 @@ func (sp *structuralParser) parseTabularArray(line lineInfo, baseIndent int, len
 			}
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -901,37 +901,37 @@ func (sp *structuralParser) splitRowByDelimiter(content string, delimiter string
 	current := ""
 	inQuotes := false
 	escaped := false
-	
+
 	for i := 0; i < len(content); i++ {
 		ch := content[i]
-		
+
 		if escaped {
 			current += string(ch)
 			escaped = false
 			continue
 		}
-		
+
 		if ch == '\\' && inQuotes {
 			current += string(ch)
 			escaped = true
 			continue
 		}
-		
+
 		if ch == '"' {
 			inQuotes = !inQuotes
 			current += string(ch)
 			continue
 		}
-		
+
 		if !inQuotes && string(ch) == delimiter {
 			parts = append(parts, current)
 			current = ""
 			continue
 		}
-		
+
 		current += string(ch)
 	}
-	
+
 	parts = append(parts, current)
 	return parts
 }
@@ -977,10 +977,10 @@ func (sp *structuralParser) parseListArray(baseIndent int, lengthStr string, del
 	result := make([]Value, 0)
 	sp.pos++
 	itemCount := 0
-	
+
 	for sp.pos < len(sp.lines) {
 		line := sp.lines[sp.pos]
-		
+
 		if line.isBlank {
 			// Check if array has ended (next non-blank line is at baseIndent or less)
 			// Look ahead to see if this blank line is between array items or after array
@@ -1004,18 +1004,18 @@ func (sp *structuralParser) parseListArray(baseIndent int, lengthStr string, del
 			sp.pos++
 			continue
 		}
-		
+
 		if line.indent <= baseIndent {
 			sp.pos--
 			break
 		}
-		
+
 		// Check for list marker
 		if strings.HasPrefix(line.content, "-") {
 			// Parse list item
 			content := strings.TrimPrefix(line.content, "-")
 			content = strings.TrimSpace(content)
-			
+
 			// Check if empty (just a hyphen) - should be empty object
 			if content == "" {
 				result = append(result, map[string]Value{})
@@ -1044,7 +1044,7 @@ func (sp *structuralParser) parseListArray(baseIndent int, lengthStr string, del
 				itemLines := []lineInfo{line}
 				itemIndent := line.indent
 				sp.pos++
-				
+
 				for sp.pos < len(sp.lines) {
 					nextLine := sp.lines[sp.pos]
 					if nextLine.isBlank {
@@ -1111,7 +1111,7 @@ func (sp *structuralParser) parseListArray(baseIndent int, lengthStr string, del
 			break
 		}
 	}
-	
+
 	// Validate array length if specified
 	if lengthStr != "" && sp.opts.Strict {
 		numStr := ""
@@ -1129,7 +1129,7 @@ func (sp *structuralParser) parseListArray(baseIndent int, lengthStr string, del
 			}
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -1138,16 +1138,16 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 	if len(lines) == 0 {
 		return nil, &DecodeError{Message: "empty list item"}
 	}
-	
+
 	firstLine := lines[0]
 	content := strings.TrimPrefix(firstLine.content, "-")
 	content = strings.TrimSpace(content)
-	
+
 	// Check for array on hyphen line - handle key[...]syntax
 	if strings.HasPrefix(content, "[") {
 		return sp.parseArrayFromLine(firstLine, baseIndent)
 	}
-	
+
 	// Check if first line contains key with array notation
 	if strings.Contains(content, "[") && strings.Contains(content, "]") {
 		// Parse key with array marker
@@ -1203,7 +1203,7 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 			return result, nil
 		}
 	}
-	
+
 	// If only one line, parse as key-value or simple value
 	if len(lines) == 1 {
 		if !strings.Contains(content, ":") {
@@ -1211,10 +1211,10 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 			return parseValue(content)
 		}
 	}
-	
+
 	// Parse as object with proper nesting support
 	result := make(map[string]Value)
-	
+
 	// Check if first line is tabular array header (e.g., users[2]{id,name}:)
 	if strings.Contains(content, "[") && strings.Contains(content, "{") && strings.Contains(content, "}") {
 		// This might be a tabular array on the hyphen line
@@ -1240,11 +1240,11 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 			if err != nil {
 				return nil, err
 			}
-			
+
 			// Build result object with the array and any remaining fields
 			result := make(map[string]Value)
 			result[key] = value
-			
+
 			// Check if there are more fields after the array (tempSP.pos points to next unparsed line)
 			for i := tempSP.pos + 1; i < len(adjustedLines); i++ {
 				line := adjustedLines[i]
@@ -1254,7 +1254,7 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 				if line.indent <= baseIndent {
 					break
 				}
-				
+
 				// Parse additional fields
 				lp := newParser(line.content)
 				fkey, ferr := lp.parseKey()
@@ -1270,11 +1270,11 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 					result[fkey] = fval
 				}
 			}
-			
+
 			return result, nil
 		}
 	}
-	
+
 	// Parse first line
 	var firstKey string
 	if strings.Contains(content, ":") {
@@ -1284,7 +1284,7 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 		if len(parts) > 1 {
 			valueStr = strings.TrimSpace(parts[1])
 		}
-		
+
 		// Handle keys with array notation
 		if strings.Contains(key, "[") && strings.Contains(key, "]") {
 			baseKey := key[:strings.Index(key, "[")]
@@ -1361,7 +1361,7 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 			}
 		}
 	}
-	
+
 	// Special handling: if firstKey was set but not added to result (empty value on first line),
 	// parse all remaining lines as nested content under firstKey - but ONLY for non-array keys
 	if firstKey != "" && !strings.Contains(firstKey, "[") {
@@ -1373,7 +1373,7 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 				tempSP := newStructuralParser("", sp.opts)
 				tempSP.lines = nestedLines
 				tempSP.pos = 0
-				
+
 				nestedObj, err := tempSP.parseObject(nestedLines[0].indent, 0)
 				if err != nil {
 					return nil, err
@@ -1383,28 +1383,28 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 			}
 		}
 	}
-	
+
 	for i < len(lines) {
 		line := lines[i]
 		if line.isBlank {
 			i++
 			continue
 		}
-		
+
 		p := newParser(line.content)
 		key, err := p.parseKey()
 		if err != nil {
 			i++
 			continue
 		}
-		
+
 		// Check for array marker
 		if p.peek() == '[' {
 			// This is an array - parse it with proper depth
 			tempSP := newStructuralParser(line.content, sp.opts)
 			tempSP.lines = []lineInfo{line}
 			tempSP.pos = 0
-			
+
 			// Collect nested lines for this array (multi-level recursion)
 			currentIndent := line.indent
 			j := i + 1
@@ -1420,7 +1420,7 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 				tempSP.lines = append(tempSP.lines, nextLine)
 				j++
 			}
-			
+
 			value, err := tempSP.parseArrayFromLine(line, currentIndent)
 			if err != nil {
 				i++
@@ -1430,15 +1430,15 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 			i = j
 			continue
 		}
-		
+
 		if err := p.expect(':'); err != nil {
 			i++
 			continue
 		}
-		
+
 		p.skipWhitespace()
 		remaining := p.input[p.pos:]
-		
+
 		// Check if value is on same line or nested
 		if remaining == "" || strings.TrimSpace(remaining) == "" {
 			// Empty value - check for nested content with multi-level support
@@ -1457,13 +1457,13 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 				nestedLines = append(nestedLines, nextLine)
 				j++
 			}
-			
+
 			if len(nestedLines) > 0 {
 				// Recursively parse nested content with depth limit (prevent stack overflow)
 				if len(nestedLines) > 100 {
 					return nil, &DecodeError{Message: "nesting depth exceeded limit"}
 				}
-				
+
 				// Check if this is the first key with empty value - if so, wrap nested content
 				if key == firstKey && firstKey != "" {
 					// This is the first key (like "properties:") - wrap all nested content under it
@@ -1471,7 +1471,7 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 					tempSP := newStructuralParser("", sp.opts)
 					tempSP.lines = nestedLines
 					tempSP.pos = 0
-					
+
 					// Parse as a nested object starting from the first nested line's indent
 					nestedObj, err := tempSP.parseObject(nestedLines[0].indent, 0)
 					if err != nil {
@@ -1481,7 +1481,7 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 					i = j
 					continue
 				}
-				
+
 				// Use parseListItem recursively for multi-level nested structures
 				nestedResult := make(map[string]Value)
 				k := 0
@@ -1493,13 +1493,13 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 						k++
 						continue
 					}
-					
+
 					// Check for nested arrays
 					if np.peek() == '[' {
 						tempSP := newStructuralParser(nestedLine.content, sp.opts)
 						tempSP.lines = []lineInfo{nestedLine}
 						tempSP.pos = 0
-						
+
 						// Collect deeply nested lines
 						nestedIndent := nestedLine.indent
 						m := k + 1
@@ -1515,7 +1515,7 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 							tempSP.lines = append(tempSP.lines, deepLine)
 							m++
 						}
-						
+
 						nvalue, nerr := tempSP.parseArrayFromLine(nestedLine, nestedIndent)
 						if nerr != nil {
 							k++
@@ -1525,14 +1525,14 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 						k = m
 						continue
 					}
-					
+
 					if nerr := np.expect(':'); nerr != nil {
 						k++
 						continue
 					}
 					np.skipWhitespace()
 					nremaining := np.input[np.pos:]
-					
+
 					// Check for deeply nested objects
 					if nremaining == "" || strings.TrimSpace(nremaining) == "" {
 						deepNestedLines := []lineInfo{}
@@ -1550,7 +1550,7 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 							deepNestedLines = append(deepNestedLines, deepLine)
 							m++
 						}
-						
+
 						if len(deepNestedLines) > 0 {
 							// Recursively parse deeper nesting
 							deepNested := make(map[string]Value)
@@ -1611,11 +1611,11 @@ func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, pare
 		}
 		i++
 	}
-	
+
 	if len(result) == 0 {
 		return parseValue(content)
 	}
-	
+
 	return result, nil
 }
 func (sp *structuralParser) parseArray(p *parser, baseIndent int) (Value, error) {
@@ -1721,7 +1721,7 @@ func (sp *structuralParser) parseHeader(header string, delimiter string) []strin
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if len(part) >= 2 && part[0] == '"' && part[len(part)-1] == '"' {
-			unescaped, err := validateAndUnescape(part[1:len(part)-1])
+			unescaped, err := validateAndUnescape(part[1 : len(part)-1])
 			if err != nil {
 				keys = append(keys, part)
 			} else {

@@ -74,7 +74,7 @@ func encodeFloat(v Value) (string, error) {
 
 	// Format float without scientific notation
 	str := strconv.FormatFloat(f, 'f', -1, 64)
-	
+
 	// Remove trailing zeros after decimal point
 	if strings.Contains(str, ".") {
 		str = strings.TrimRight(str, "0")
@@ -243,7 +243,7 @@ func validateAndUnescape(s string) (string, error) {
 			i++
 		}
 	}
-	
+
 	// Check for odd number of trailing backslashes (unterminated)
 	// This shouldn't happen if we've processed correctly, but validate
 	trailingBackslashes := 0
@@ -253,7 +253,7 @@ func validateAndUnescape(s string) (string, error) {
 	if trailingBackslashes%2 == 1 {
 		return "", &DecodeError{Message: "unterminated string: odd number of trailing backslashes"}
 	}
-	
+
 	return result.String(), nil
 }
 
@@ -308,7 +308,7 @@ func parseNumber(s string) (Value, error) {
 	if len(s) > 1 && s[0] == '0' && s[1] >= '0' && s[1] <= '9' {
 		return nil, fmt.Errorf("not a number (leading zero)")
 	}
-	
+
 	// Try integer first
 	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
 		return i, nil

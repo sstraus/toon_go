@@ -5,11 +5,11 @@ import "fmt"
 // encode encodes a normalized value to TOON format string.
 func encode(v Value, opts *EncodeOptions) (string, error) {
 	w := newWriter(opts.Indent)
-	
+
 	if err := encodeValue(w, "", v, 0, opts); err != nil {
 		return "", err
 	}
-	
+
 	return w.String(), nil
 }
 

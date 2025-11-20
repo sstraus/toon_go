@@ -178,11 +178,11 @@ func fixtureOptionsToEncodeOptions(opts map[string]interface{}) *EncodeOptions {
 	if keyFolding, ok := opts["keyFolding"].(string); ok {
 		encOpts.FlattenPaths = (keyFolding == "safe")
 	}
-	
+
 	if flattenPaths, ok := opts["flattenPaths"].(bool); ok {
 		encOpts.FlattenPaths = flattenPaths
 	}
-	
+
 	if flattenDepth, ok := opts["flattenDepth"].(float64); ok {
 		encOpts.FlattenDepth = int(flattenDepth)
 	} else if flattenDepth, ok := opts["flattenDepth"].(int); ok {
@@ -191,7 +191,7 @@ func fixtureOptionsToEncodeOptions(opts map[string]interface{}) *EncodeOptions {
 		// Not set - use -1 as sentinel for "not specified"
 		encOpts.FlattenDepth = -1
 	}
-	
+
 	if strict, ok := opts["strict"].(bool); ok {
 		encOpts.Strict = strict
 	}
@@ -276,16 +276,16 @@ func deepEqual(a, b interface{}) bool {
 		if aVal.Len() != bVal.Len() {
 			return false
 		}
-		
+
 		aKeys := aVal.MapKeys()
 		for _, key := range aKeys {
 			aElem := aVal.MapIndex(key)
 			bElem := bVal.MapIndex(key)
-			
+
 			if !bElem.IsValid() {
 				return false
 			}
-			
+
 			if !deepEqual(aElem.Interface(), bElem.Interface()) {
 				return false
 			}

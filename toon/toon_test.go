@@ -169,10 +169,11 @@ func TestMarshalEmptyArray(t *testing.T) {
 		t.Errorf("Marshal() = %q, want %q", string(result), expected)
 	}
 }
+
 // TestEncodeFixtures runs all official TOON specification encode tests
 func TestEncodeFixtures(t *testing.T) {
 	fixtureDir := "../testdata/fixtures/encode"
-	
+
 	entries, err := os.ReadDir(fixtureDir)
 	if err != nil {
 		t.Fatalf("Failed to read fixture directory: %v", err)
@@ -184,7 +185,7 @@ func TestEncodeFixtures(t *testing.T) {
 	for _, entry := range entries {
 		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".json" {
 			fixturePath := filepath.Join(fixtureDir, entry.Name())
-			
+
 			fixture, err := loadFixture(fixturePath)
 			if err != nil {
 				t.Errorf("Failed to load fixture %s: %v", entry.Name(), err)
@@ -194,7 +195,7 @@ func TestEncodeFixtures(t *testing.T) {
 			t.Run(entry.Name(), func(t *testing.T) {
 				for _, test := range fixture.Tests {
 					totalTests++
-					
+
 					t.Run(test.Name, func(t *testing.T) {
 						// Convert fixture options to encode options
 						opts := fixtureOptionsToEncodeOptions(test.Options)
@@ -649,19 +650,19 @@ func TestAssignResultDirectArrayAssignment(t *testing.T) {
 	t.Run("assign array value to array target", func(t *testing.T) {
 		// Create an array value directly
 		arrayValue := []Value{"item1", "item2", int64(3)}
-		
+
 		// Test direct assignment
 		var target []interface{}
 		err := assignResult(arrayValue, &target)
-		
+
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		
+
 		if len(target) != 3 {
 			t.Errorf("expected length 3, got %d", len(target))
 		}
-		
+
 		if target[0] != "item1" {
 			t.Errorf("target[0] = %v, want item1", target[0])
 		}
@@ -675,14 +676,14 @@ func TestAssignResultDirectArrayAssignment(t *testing.T) {
 
 	t.Run("assign empty array to array target", func(t *testing.T) {
 		arrayValue := []Value{}
-		
+
 		var target []interface{}
 		err := assignResult(arrayValue, &target)
-		
+
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		
+
 		if len(target) != 0 {
 			t.Errorf("expected empty array, got length %d", len(target))
 		}
@@ -695,18 +696,18 @@ func TestAssignResultDirectArrayAssignment(t *testing.T) {
 			[]Value{"nested", "array"},
 			int64(42),
 		}
-		
+
 		var target []interface{}
 		err := assignResult(nestedArray, &target)
-		
+
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		
+
 		if len(target) != 3 {
 			t.Errorf("expected length 3, got %d", len(target))
 		}
-		
+
 		// Check nested map
 		nestedMap, ok := target[0].(map[string]Value)
 		if !ok {
@@ -714,7 +715,7 @@ func TestAssignResultDirectArrayAssignment(t *testing.T) {
 		} else if nestedMap["key"] != "value" {
 			t.Errorf("nestedMap[key] = %v, want value", nestedMap["key"])
 		}
-		
+
 		// Check nested array
 		nestedArr, ok := target[1].([]Value)
 		if !ok {
@@ -736,19 +737,19 @@ func TestAssignResultDirectMapAssignment(t *testing.T) {
 			"bool":   true,
 			"null":   nil,
 		}
-		
+
 		// Test direct assignment
 		var target map[string]interface{}
 		err := assignResult(mapValue, &target)
-		
+
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		
+
 		if len(target) != 4 {
 			t.Errorf("expected length 4, got %d", len(target))
 		}
-		
+
 		if target["string"] != "value" {
 			t.Errorf("target[string] = %v, want value", target["string"])
 		}
@@ -765,14 +766,14 @@ func TestAssignResultDirectMapAssignment(t *testing.T) {
 
 	t.Run("assign empty map to map target", func(t *testing.T) {
 		mapValue := map[string]Value{}
-		
+
 		var target map[string]interface{}
 		err := assignResult(mapValue, &target)
-		
+
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		
+
 		if len(target) != 0 {
 			t.Errorf("expected empty map, got length %d", len(target))
 		}
@@ -785,18 +786,18 @@ func TestAssignResultDirectMapAssignment(t *testing.T) {
 			"nested_array": []Value{"a", "b", "c"},
 			"primitive":    "simple",
 		}
-		
+
 		var target map[string]interface{}
 		err := assignResult(nestedMap, &target)
-		
+
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		
+
 		if len(target) != 3 {
 			t.Errorf("expected length 3, got %d", len(target))
 		}
-		
+
 		// Check nested map
 		innerMap, ok := target["nested_map"].(map[string]Value)
 		if !ok {
@@ -804,7 +805,7 @@ func TestAssignResultDirectMapAssignment(t *testing.T) {
 		} else if innerMap["inner"] != "value" {
 			t.Errorf("innerMap[inner] = %v, want value", innerMap["inner"])
 		}
-		
+
 		// Check nested array
 		innerArr, ok := target["nested_array"].([]Value)
 		if !ok {

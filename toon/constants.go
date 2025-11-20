@@ -54,11 +54,11 @@ var controlChars = []string{"\n", "\r", "\t", "\b", "\f"}
 
 // Escape sequence mappings
 var escapeSequences = map[string]string{
-	"\\":  "\\\\",
-	"\"":  "\\\"",
-	"\n":  "\\n",
-	"\r":  "\\r",
-	"\t":  "\\t",
+	"\\": "\\\\",
+	"\"": "\\\"",
+	"\n": "\\n",
+	"\r": "\\r",
+	"\t": "\\t",
 }
 
 // Unescape sequence mappings

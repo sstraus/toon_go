@@ -45,9 +45,9 @@ func TestDecodeError_Formatting(t *testing.T) {
 
 func TestDecodeError_Error_AllFormats(t *testing.T) {
 	tests := []struct {
-		name     string
-		err      *DecodeError
-		contains []string
+		name        string
+		err         *DecodeError
+		contains    []string
 		notContains []string
 	}{
 		{
@@ -55,7 +55,7 @@ func TestDecodeError_Error_AllFormats(t *testing.T) {
 			err: &DecodeError{
 				Message: "simple error",
 			},
-			contains: []string{"simple error"},
+			contains:    []string{"simple error"},
 			notContains: []string{"at line", "at column", "token:", "Context:"},
 		},
 		{
@@ -73,7 +73,7 @@ func TestDecodeError_Error_AllFormats(t *testing.T) {
 				Message: "line error",
 				Line:    5,
 			},
-			contains: []string{"line error at line 5"},
+			contains:    []string{"line error at line 5"},
 			notContains: []string{"column"},
 		},
 		{
@@ -82,7 +82,7 @@ func TestDecodeError_Error_AllFormats(t *testing.T) {
 				Message: "column error",
 				Column:  15,
 			},
-			contains: []string{"column error at column 15"},
+			contains:    []string{"column error at column 15"},
 			notContains: []string{"at line"},
 		},
 		{
@@ -123,7 +123,7 @@ func TestDecodeError_Error_AllFormats(t *testing.T) {
 				Message: "no token",
 				Token:   "",
 			},
-			contains: []string{"no token"},
+			contains:    []string{"no token"},
 			notContains: []string{"token:"},
 		},
 		{
@@ -132,7 +132,7 @@ func TestDecodeError_Error_AllFormats(t *testing.T) {
 				Message: "no context",
 				Context: "",
 			},
-			contains: []string{"no context"},
+			contains:    []string{"no context"},
 			notContains: []string{"Context:"},
 		},
 		{
@@ -142,7 +142,7 @@ func TestDecodeError_Error_AllFormats(t *testing.T) {
 				Line:    0,
 				Column:  0,
 			},
-			contains: []string{"no position"},
+			contains:    []string{"no position"},
 			notContains: []string{"at line", "at column"},
 		},
 	}
@@ -225,9 +225,9 @@ func TestDecodeError_ErrorsIs(t *testing.T) {
 
 func TestEncodeError_Error_AllFormats(t *testing.T) {
 	tests := []struct {
-		name     string
-		err      *EncodeError
-		contains []string
+		name        string
+		err         *EncodeError
+		contains    []string
 		notContains []string
 	}{
 		{
@@ -260,7 +260,7 @@ func TestEncodeError_Error_AllFormats(t *testing.T) {
 				Value:   "some_value",
 				Cause:   errors.New("some cause"),
 			},
-			contains: []string{"both present:", "some_value"},
+			contains:    []string{"both present:", "some_value"},
 			notContains: []string{"some cause"},
 		},
 		{

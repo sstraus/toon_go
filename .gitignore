@@ -1,0 +1,36 @@
+# IDE and tool-specific files
+.roo
+.roomodes
+.serena
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation and internal files
+docs
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Test coverage
+coverage*
+*.coverprofile
+
+# Binary output
+/bin/
+/dist/
+
+# Dependency directories
+vendor/
+
+# Go workspace file (local development only)
+go.work
+go.work.sum

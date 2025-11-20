@@ -56,7 +56,7 @@ func TestUnmarshalSimplePrimitive(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unmarshal() error = %v", err)
 			}
-			
+
 			// Compare values
 			if !valuesEqual(result, tt.expected) {
 				t.Errorf("Unmarshal() = %v (%T), want %v (%T)", result, result, tt.expected, tt.expected)
@@ -67,13 +67,13 @@ func TestUnmarshalSimplePrimitive(t *testing.T) {
 
 func TestUnmarshalSimpleObject(t *testing.T) {
 	input := "name: Alice\nage: 30"
-	
+
 	var result map[string]interface{}
 	err := Unmarshal([]byte(input), &result, nil)
 	if err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
-	
+
 	if result["name"] != "Alice" {
 		t.Errorf("name = %v, want Alice", result["name"])
 	}
@@ -84,18 +84,18 @@ func TestUnmarshalSimpleObject(t *testing.T) {
 
 func TestUnmarshalInlineArray(t *testing.T) {
 	input := "tags[2]: go,toon"
-	
+
 	var result map[string]interface{}
 	err := Unmarshal([]byte(input), &result, nil)
 	if err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
-	
+
 	tags, ok := result["tags"].([]Value)
 	if !ok {
 		t.Fatalf("tags is not an array: %T", result["tags"])
 	}
-	
+
 	if len(tags) != 2 {
 		t.Errorf("len(tags) = %d, want 2", len(tags))
 	}
@@ -109,18 +109,18 @@ func TestUnmarshalInlineArray(t *testing.T) {
 
 func TestUnmarshalNestedObject(t *testing.T) {
 	input := "user:\n  name: Bob"
-	
+
 	var result map[string]interface{}
 	err := Unmarshal([]byte(input), &result, nil)
 	if err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
-	
+
 	user, ok := result["user"].(map[string]Value)
 	if !ok {
 		t.Fatalf("user is not an object: %T", result["user"])
 	}
-	
+
 	if user["name"] != "Bob" {
 		t.Errorf("user.name = %v, want Bob", user["name"])
 	}
@@ -128,27 +128,27 @@ func TestUnmarshalNestedObject(t *testing.T) {
 
 func TestUnmarshalTabularArray(t *testing.T) {
 	input := "users[2]{age,name}:\n  30,Alice\n  25,Bob"
-	
+
 	var result map[string]interface{}
 	err := Unmarshal([]byte(input), &result, nil)
 	if err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
-	
+
 	users, ok := result["users"].([]Value)
 	if !ok {
 		t.Fatalf("users is not an array: %T", result["users"])
 	}
-	
+
 	if len(users) != 2 {
 		t.Errorf("len(users) = %d, want 2", len(users))
 	}
-	
+
 	user0, ok := users[0].(map[string]Value)
 	if !ok {
 		t.Fatalf("users[0] is not an object: %T", users[0])
 	}
-	
+
 	if user0["name"] != "Alice" {
 		t.Errorf("users[0].name = %v, want Alice", user0["name"])
 	}
@@ -184,7 +184,7 @@ func TestRoundTrip(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Encode
@@ -192,14 +192,14 @@ func TestRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Marshal() error = %v", err)
 			}
-			
+
 			// Decode
 			var result interface{}
 			err = Unmarshal(encoded, &result, nil)
 			if err != nil {
 				t.Fatalf("Unmarshal() error = %v", err)
 			}
-			
+
 			// Compare (basic comparison, not deep)
 			// For proper comparison, we'd need to normalize types
 			t.Logf("Encoded: %s", string(encoded))
@@ -217,31 +217,32 @@ func valuesEqual(a, b interface{}) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	
+
 	// Direct comparison for same types
 	if a == b {
 		return true
 	}
-	
+
 	// Handle numeric comparisons (int vs int64, etc.)
 	aInt, aIsInt := toInt64(a)
 	bInt, bIsInt := toInt64(b)
 	if aIsInt && bIsInt {
 		return aInt == bInt
 	}
-	
+
 	aFloat, aIsFloat := toFloat64(a)
 	bFloat, bIsFloat := toFloat64(b)
 	if aIsFloat && bIsFloat {
 		return aFloat == bFloat
 	}
-	
+
 	return false
 }
+
 // TestDecodeFixtures runs all official TOON specification decode tests
 func TestDecodeFixtures(t *testing.T) {
 	fixtureDir := "../testdata/fixtures/decode"
-	
+
 	entries, err := os.ReadDir(fixtureDir)
 	if err != nil {
 		t.Fatalf("Failed to read fixture directory: %v", err)
@@ -253,7 +254,7 @@ func TestDecodeFixtures(t *testing.T) {
 	for _, entry := range entries {
 		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".json" {
 			fixturePath := filepath.Join(fixtureDir, entry.Name())
-			
+
 			fixture, err := loadFixture(fixturePath)
 			if err != nil {
 				t.Errorf("Failed to load fixture %s: %v", entry.Name(), err)
@@ -263,7 +264,7 @@ func TestDecodeFixtures(t *testing.T) {
 			t.Run(entry.Name(), func(t *testing.T) {
 				for _, test := range fixture.Tests {
 					totalTests++
-					
+
 					t.Run(test.Name, func(t *testing.T) {
 						// Convert fixture options to decode options
 						opts := fixtureOptionsToDecodeOptions(test.Options)
@@ -278,7 +279,7 @@ func TestDecodeFixtures(t *testing.T) {
 						// Decode the input
 						var result interface{}
 						err := Unmarshal([]byte(inputStr), &result, opts)
-						
+
 						// Handle shouldError tests
 						if test.ShouldError {
 							if err == nil {
@@ -290,7 +291,7 @@ func TestDecodeFixtures(t *testing.T) {
 							passedTests++
 							return
 						}
-						
+
 						// Non-error test cases
 						if err != nil {
 							t.Errorf("Unmarshal() error = %v\nSpec Section: %s\nInput: %q\nNote: %s",

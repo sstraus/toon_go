@@ -751,7 +751,7 @@ func TestParseKeyValueLineWithQuoteInfo(t *testing.T) {
 				lineNumber: 1,
 			},
 			baseIndent:     0,
-			expectedKey:    "items",  // Key is extracted without array notation
+			expectedKey:    "items", // Key is extracted without array notation
 			expectedQuoted: false,
 			// Array notation key returns empty array
 			skipValueCheck: true,

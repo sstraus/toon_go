@@ -69,7 +69,7 @@ func getEncodeOptions(opts *EncodeOptions) *EncodeOptions {
 		FlattenDepth: opts.FlattenDepth,
 		Strict:       opts.Strict,
 	}
-	
+
 	// Handle FlattenDepth defaults for infinite folding
 	// -1 means "not set" (use infinite)
 	// 0 means "explicitly disabled" (no folding)

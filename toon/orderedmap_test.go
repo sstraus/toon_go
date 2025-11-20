@@ -599,32 +599,32 @@ func TestDecodeOrderedMapWithExistingOrderedMap(t *testing.T) {
 	// First create an OrderedMap with nested OrderedMap
 	inner := NewOrderedMap()
 	inner.Set("inner_key", "inner_value")
-	
+
 	om := NewOrderedMap()
 	om.Set("outer", *inner)
-	
+
 	// Now marshal and unmarshal to trigger the OrderedMap path
 	data, err := om.MarshalJSON()
 	if err != nil {
 		t.Fatalf("MarshalJSON failed: %v", err)
 	}
-	
+
 	om2 := NewOrderedMap()
 	err = om2.UnmarshalJSON(data)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	outer, exists := om2.Get("outer")
 	if !exists {
 		t.Fatal("outer should exist")
 	}
-	
+
 	outerMap, ok := outer.(OrderedMap)
 	if !ok {
 		t.Fatalf("outer should be OrderedMap, got %T", outer)
 	}
-	
+
 	val, exists := outerMap.Get("inner_key")
 	if !exists || val != "inner_value" {
 		t.Errorf("inner_key = %v, want inner_value", val)
@@ -635,40 +635,40 @@ func TestDecodeOrderedMapWithExistingOrderedMap(t *testing.T) {
 func TestDecodeSliceWithExistingOrderedMap(t *testing.T) {
 	inner := NewOrderedMap()
 	inner.Set("key", "value")
-	
+
 	om := NewOrderedMap()
 	om.Set("array", []interface{}{*inner})
-	
+
 	data, err := om.MarshalJSON()
 	if err != nil {
 		t.Fatalf("MarshalJSON failed: %v", err)
 	}
-	
+
 	om2 := NewOrderedMap()
 	err = om2.UnmarshalJSON(data)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	array, exists := om2.Get("array")
 	if !exists {
 		t.Fatal("array should exist")
 	}
-	
+
 	slice, ok := array.([]interface{})
 	if !ok {
 		t.Fatalf("array should be []interface{}, got %T", array)
 	}
-	
+
 	if len(slice) != 1 {
 		t.Fatalf("slice length = %v, want 1", len(slice))
 	}
-	
+
 	elem, ok := slice[0].(OrderedMap)
 	if !ok {
 		t.Fatalf("slice[0] should be OrderedMap, got %T", slice[0])
 	}
-	
+
 	val, _ := elem.Get("key")
 	if val != "value" {
 		t.Errorf("key = %v, want value", val)
@@ -680,22 +680,22 @@ func TestDecodeSliceOutOfBoundsObject(t *testing.T) {
 	jsonData := []byte(`{
 		"arr": [{"a": 1}, {"b": 2}, {"c": 3}]
 	}`)
-	
+
 	om := NewOrderedMap()
 	// Pre-populate with shorter slice
 	om.Set("arr", []interface{}{})
-	
+
 	err := om.UnmarshalJSON(jsonData)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	arr, _ := om.Get("arr")
 	slice, ok := arr.([]interface{})
 	if !ok {
 		t.Fatal("arr should be []interface{}")
 	}
-	
+
 	// Should have processed all 3 objects even though initial slice was empty
 	if len(slice) != 3 {
 		t.Errorf("slice length = %v, want 3", len(slice))
@@ -707,21 +707,21 @@ func TestDecodeSliceOutOfBoundsArray(t *testing.T) {
 	jsonData := []byte(`{
 		"arr": [[1], [2], [3]]
 	}`)
-	
+
 	om := NewOrderedMap()
 	om.Set("arr", []interface{}{})
-	
+
 	err := om.UnmarshalJSON(jsonData)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	arr, _ := om.Get("arr")
 	slice, ok := arr.([]interface{})
 	if !ok {
 		t.Fatal("arr should be []interface{}")
 	}
-	
+
 	if len(slice) != 3 {
 		t.Errorf("slice length = %v, want 3", len(slice))
 	}
@@ -732,21 +732,21 @@ func TestDecodeSliceNonMapNonSliceObject(t *testing.T) {
 	jsonData := []byte(`{
 		"arr": [42, {"key": "value"}]
 	}`)
-	
+
 	om := NewOrderedMap()
 	om.Set("arr", []interface{}{42, "string"})
-	
+
 	err := om.UnmarshalJSON(jsonData)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	arr, _ := om.Get("arr")
 	slice, ok := arr.([]interface{})
 	if !ok {
 		t.Fatal("arr should be []interface{}")
 	}
-	
+
 	if len(slice) != 2 {
 		t.Errorf("slice length = %v, want 2", len(slice))
 	}
@@ -757,21 +757,21 @@ func TestDecodeSliceNonSliceArray(t *testing.T) {
 	jsonData := []byte(`{
 		"arr": ["string", [1, 2]]
 	}`)
-	
+
 	om := NewOrderedMap()
 	om.Set("arr", []interface{}{"string", 42})
-	
+
 	err := om.UnmarshalJSON(jsonData)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	arr, _ := om.Get("arr")
 	slice, ok := arr.([]interface{})
 	if !ok {
 		t.Fatal("arr should be []interface{}")
 	}
-	
+
 	if len(slice) != 2 {
 		t.Errorf("slice length = %v, want 2", len(slice))
 	}
@@ -782,26 +782,26 @@ func TestDecodeOrderedMapNonMapNonOrderedMap(t *testing.T) {
 	jsonData := []byte(`{
 		"key": {"nested": "value"}
 	}`)
-	
+
 	om := NewOrderedMap()
 	om.Set("key", "string_value")
-	
+
 	err := om.UnmarshalJSON(jsonData)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	key, exists := om.Get("key")
 	if !exists {
 		t.Fatal("key should exist")
 	}
-	
+
 	// Should have been replaced with OrderedMap
 	keyMap, ok := key.(OrderedMap)
 	if !ok {
 		t.Fatalf("key should be OrderedMap, got %T", key)
 	}
-	
+
 	nested, _ := keyMap.Get("nested")
 	if nested != "value" {
 		t.Errorf("nested = %v, want value", nested)
@@ -813,26 +813,26 @@ func TestDecodeOrderedMapNonSliceArray(t *testing.T) {
 	jsonData := []byte(`{
 		"arr": [1, 2, 3]
 	}`)
-	
+
 	om := NewOrderedMap()
 	om.Set("arr", "not_a_slice")
-	
+
 	err := om.UnmarshalJSON(jsonData)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	arr, exists := om.Get("arr")
 	if !exists {
 		t.Fatal("arr should exist")
 	}
-	
+
 	// Should still be the original value since we can't convert
 	slice, ok := arr.([]interface{})
 	if !ok {
 		t.Fatalf("arr should be []interface{}, got %T", arr)
 	}
-	
+
 	if len(slice) != 3 {
 		t.Errorf("slice length = %v, want 3", len(slice))
 	}
@@ -841,12 +841,12 @@ func TestDecodeOrderedMapNonSliceArray(t *testing.T) {
 // TestMarshalJSONEmptyMap tests marshaling an empty OrderedMap
 func TestMarshalJSONEmptyMap(t *testing.T) {
 	om := NewOrderedMap()
-	
+
 	data, err := om.MarshalJSON()
 	if err != nil {
 		t.Fatalf("MarshalJSON failed: %v", err)
 	}
-	
+
 	// Remove newlines
 	str := strings.ReplaceAll(string(data), "\n", "")
 	if str != "{}" {
@@ -888,27 +888,28 @@ func TestOrderedMapEscapeHTMLPropagation(t *testing.T) {
 		t.Errorf("Expected HTML to not be escaped in nested map, got: %s", dataStr)
 	}
 }
+
 // TestDecodeSliceInBoundsNonMapObject tests when slice has element that's not map/OrderedMap but object encountered
 func TestDecodeSliceInBoundsNonMapObject(t *testing.T) {
 	jsonData := []byte(`{
 		"arr": [{"key": "value"}]
 	}`)
-	
+
 	om := NewOrderedMap()
 	// Pre-populate with non-map value
 	om.Set("arr", []interface{}{42})
-	
+
 	err := om.UnmarshalJSON(jsonData)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	arr, _ := om.Get("arr")
 	slice, ok := arr.([]interface{})
 	if !ok {
 		t.Fatal("arr should be []interface{}")
 	}
-	
+
 	if len(slice) != 1 {
 		t.Errorf("slice length = %v, want 1", len(slice))
 	}
@@ -919,22 +920,22 @@ func TestDecodeSliceInBoundsNonSliceArray(t *testing.T) {
 	jsonData := []byte(`{
 		"arr": [[1, 2]]
 	}`)
-	
+
 	om := NewOrderedMap()
 	// Pre-populate with non-slice value
 	om.Set("arr", []interface{}{"string"})
-	
+
 	err := om.UnmarshalJSON(jsonData)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	arr, _ := om.Get("arr")
 	slice, ok := arr.([]interface{})
 	if !ok {
 		t.Fatal("arr should be []interface{}")
 	}
-	
+
 	if len(slice) != 1 {
 		t.Errorf("slice length = %v, want 1", len(slice))
 	}
@@ -945,33 +946,33 @@ func TestDecodeSliceWithMapInSlice(t *testing.T) {
 	jsonData := []byte(`{
 		"arr": [{"nested": "value"}]
 	}`)
-	
+
 	om := NewOrderedMap()
 	// Pre-populate with map[string]interface{}
 	innerMap := make(map[string]interface{})
 	innerMap["old"] = "data"
 	om.Set("arr", []interface{}{innerMap})
-	
+
 	err := om.UnmarshalJSON(jsonData)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	arr, _ := om.Get("arr")
 	slice, ok := arr.([]interface{})
 	if !ok {
 		t.Fatal("arr should be []interface{}")
 	}
-	
+
 	if len(slice) != 1 {
 		t.Errorf("slice length = %v, want 1", len(slice))
 	}
-	
+
 	elem, ok := slice[0].(OrderedMap)
 	if !ok {
 		t.Fatalf("slice[0] should be OrderedMap, got %T", slice[0])
 	}
-	
+
 	val, _ := elem.Get("nested")
 	if val != "value" {
 		t.Errorf("nested = %v, want value", val)
@@ -983,23 +984,23 @@ func TestDecodeSliceWithSliceInSlice(t *testing.T) {
 	jsonData := []byte(`{
 		"matrix": [[1, 2, 3]]
 	}`)
-	
+
 	om := NewOrderedMap()
 	// Pre-populate with existing slice
 	inner := []interface{}{99}
 	om.Set("matrix", []interface{}{inner})
-	
+
 	err := om.UnmarshalJSON(jsonData)
 	if err != nil {
 		t.Fatalf("UnmarshalJSON failed: %v", err)
 	}
-	
+
 	matrix, _ := om.Get("matrix")
 	outer, ok := matrix.([]interface{})
 	if !ok {
 		t.Fatal("matrix should be []interface{}")
 	}
-	
+
 	if len(outer) != 1 {
 		t.Errorf("outer length = %v, want 1", len(outer))
 	}
@@ -1025,7 +1026,7 @@ func TestUnmarshalJSONErrorInToken(t *testing.T) {
 			json: `{"arr": [invalid]}`,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			om := NewOrderedMap()
@@ -1043,7 +1044,7 @@ func TestMarshalJSONWithError(t *testing.T) {
 	// Add a value that can't be marshaled (channels can't be marshaled)
 	ch := make(chan int)
 	om.Set("invalid", ch)
-	
+
 	_, err := om.MarshalJSON()
 	if err == nil {
 		t.Error("Expected error when marshaling unmarshalable value")

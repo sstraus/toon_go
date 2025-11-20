@@ -1,5 +1,10 @@
 # TOON Go Library
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/sstraus/toon_go.svg)](https://pkg.go.dev/github.com/sstraus/toon_go)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sstraus/toon_go)](https://goreportcard.com/report/github.com/sstraus/toon_go)
+[![CI](https://github.com/sstraus/toon_go/actions/workflows/ci.yml/badge.svg)](https://github.com/sstraus/toon_go/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A Go implementation of TOON (Token-Oriented Object Notation) format encoder and decoder, compliant with TOON Specification v2.0.
 
 ✅ **Encoder & Decoder Complete** ✅
@@ -15,7 +20,7 @@ Currently implemented:
 - ✅ Round-trip encoding/decoding
 - ✅ Official specification fixtures (340/340 passing)
 - ✅ Comprehensive test suite (196 decode + 144 encode)
-- ✅ 65.4% code coverage
+- ✅ 80.5% code coverage
 
 ## About TOON
 
@@ -32,8 +37,10 @@ TOON is a compact data format optimized for LLM token efficiency, achieving **30
 
 ## Installation
 
+Requires Go 1.22 or newer.
+
 ```bash
-go get github.com/sstraus/toon_go/toon
+go get github.com/sstraus/toon_go/toon@latest
 ```
 
 ## Usage
@@ -59,7 +66,7 @@ func main() {
     if err != nil {
         panic(err)
     }
-    
+
     fmt.Println(string(encoded))
     // Output:
     // age: 30
@@ -155,6 +162,20 @@ go test -cover
 - ✅ 196 decode fixtures
 - ✅ 144 encode fixtures
 - ✅ 80.5% code coverage
+
+Continuous integration runs the full test suite and publishes coverage on every
+push and pull request via GitHub Actions (`.github/workflows/ci.yml`).
+
+## Versioning
+
+The library follows [Semantic Versioning](https://semver.org/). The current
+release number is exposed programmatically via the `toon.Version` constant, and
+human-readable release notes are maintained in `CHANGELOG.md`.
+
+## Contributing
+
+Contributions are welcome! Please review `CONTRIBUTING.md` for development
+guidelines before opening an issue or pull request.
 
 ## Specification
 

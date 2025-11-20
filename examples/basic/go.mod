@@ -1,7 +1,7 @@
-module examples/basic
+module github.com/sstraus/toon_go/examples/basic
 
-go 1.25.4
+go 1.22
 
-replace github.com/sstraus/toon_go/toon => ../../toon
+require github.com/sstraus/toon_go v0.0.0-00010101000000-000000000000
 
-require github.com/sstraus/toon_go/toon v0.0.0-00010101000000-000000000000
+replace github.com/sstraus/toon_go => ../..
