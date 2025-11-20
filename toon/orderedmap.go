@@ -146,61 +146,85 @@ func decodeOrderedMap(dec *json.Decoder, o *OrderedMap) error {
 			return nil
 		}
 		key := token.(string)
-		if hasKey[key] {
-			// duplicate key
-			for j, k := range o.keys {
-				if k == key {
-					copy(o.keys[j:], o.keys[j+1:])
-					break
-				}
-			}
-			o.keys[len(o.keys)-1] = key
-		} else {
-			hasKey[key] = true
-			o.keys = append(o.keys, key)
-		}
+		handleOrderedMapKey(o, key, hasKey)
 
 		token, err = dec.Token()
 		if err != nil {
 			return err
 		}
 		if delim, ok := token.(json.Delim); ok {
-			switch delim {
-			case '{':
-				if values, ok := o.values[key].(map[string]interface{}); ok {
-					newMap := OrderedMap{
-						keys:       make([]string, 0, len(values)),
-						values:     values,
-						escapeHTML: o.escapeHTML,
-					}
-					if err = decodeOrderedMap(dec, &newMap); err != nil {
-						return err
-					}
-					o.values[key] = newMap
-				} else if oldMap, ok := o.values[key].(OrderedMap); ok {
-					newMap := OrderedMap{
-						keys:       make([]string, 0, len(oldMap.values)),
-						values:     oldMap.values,
-						escapeHTML: o.escapeHTML,
-					}
-					if err = decodeOrderedMap(dec, &newMap); err != nil {
-						return err
-					}
-					o.values[key] = newMap
-				} else if err = decodeOrderedMap(dec, &OrderedMap{}); err != nil {
-					return err
-				}
-			case '[':
-				if values, ok := o.values[key].([]interface{}); ok {
-					if err = decodeSlice(dec, values, o.escapeHTML); err != nil {
-						return err
-					}
-				} else if err = decodeSlice(dec, []interface{}{}, o.escapeHTML); err != nil {
-					return err
-				}
+			if err := handleOrderedMapDelimiter(dec, o, key, delim); err != nil {
+				return err
 			}
 		}
 	}
+}
+
+// handleOrderedMapKey handles adding or updating a key in the ordered map.
+func handleOrderedMapKey(o *OrderedMap, key string, hasKey map[string]bool) {
+	if hasKey[key] {
+		// Duplicate key - move to end
+		for j, k := range o.keys {
+			if k == key {
+				copy(o.keys[j:], o.keys[j+1:])
+				break
+			}
+		}
+		o.keys[len(o.keys)-1] = key
+	} else {
+		hasKey[key] = true
+		o.keys = append(o.keys, key)
+	}
+}
+
+// handleOrderedMapDelimiter handles nested objects and arrays in ordered map.
+func handleOrderedMapDelimiter(dec *json.Decoder, o *OrderedMap, key string, delim json.Delim) error {
+	switch delim {
+	case '{':
+		return handleNestedObject(dec, o, key)
+	case '[':
+		return handleNestedArray(dec, o, key)
+	}
+	return nil
+}
+
+// handleNestedObject handles decoding a nested object.
+func handleNestedObject(dec *json.Decoder, o *OrderedMap, key string) error {
+	if values, ok := o.values[key].(map[string]interface{}); ok {
+		newMap := OrderedMap{
+			keys:       make([]string, 0, len(values)),
+			values:     values,
+			escapeHTML: o.escapeHTML,
+		}
+		if err := decodeOrderedMap(dec, &newMap); err != nil {
+			return err
+		}
+		o.values[key] = newMap
+		return nil
+	}
+
+	if oldMap, ok := o.values[key].(OrderedMap); ok {
+		newMap := OrderedMap{
+			keys:       make([]string, 0, len(oldMap.values)),
+			values:     oldMap.values,
+			escapeHTML: o.escapeHTML,
+		}
+		if err := decodeOrderedMap(dec, &newMap); err != nil {
+			return err
+		}
+		o.values[key] = newMap
+		return nil
+	}
+
+	return decodeOrderedMap(dec, &OrderedMap{})
+}
+
+// handleNestedArray handles decoding a nested array.
+func handleNestedArray(dec *json.Decoder, o *OrderedMap, key string) error {
+	if values, ok := o.values[key].([]interface{}); ok {
+		return decodeSlice(dec, values, o.escapeHTML)
+	}
+	return decodeSlice(dec, []interface{}{}, o.escapeHTML)
 }
 
 func decodeSlice(dec *json.Decoder, s []interface{}, escapeHTML bool) error {
@@ -212,43 +236,11 @@ func decodeSlice(dec *json.Decoder, s []interface{}, escapeHTML bool) error {
 		if delim, ok := token.(json.Delim); ok {
 			switch delim {
 			case '{':
-				if index < len(s) {
-					if values, ok := s[index].(map[string]interface{}); ok {
-						newMap := OrderedMap{
-							keys:       make([]string, 0, len(values)),
-							values:     values,
-							escapeHTML: escapeHTML,
-						}
-						if err = decodeOrderedMap(dec, &newMap); err != nil {
-							return err
-						}
-						s[index] = newMap
-					} else if oldMap, ok := s[index].(OrderedMap); ok {
-						newMap := OrderedMap{
-							keys:       make([]string, 0, len(oldMap.values)),
-							values:     oldMap.values,
-							escapeHTML: escapeHTML,
-						}
-						if err = decodeOrderedMap(dec, &newMap); err != nil {
-							return err
-						}
-						s[index] = newMap
-					} else if err = decodeOrderedMap(dec, &OrderedMap{}); err != nil {
-						return err
-					}
-				} else if err = decodeOrderedMap(dec, &OrderedMap{}); err != nil {
+				if err := handleSliceNestedObject(dec, s, index, escapeHTML); err != nil {
 					return err
 				}
 			case '[':
-				if index < len(s) {
-					if values, ok := s[index].([]interface{}); ok {
-						if err = decodeSlice(dec, values, escapeHTML); err != nil {
-							return err
-						}
-					} else if err = decodeSlice(dec, []interface{}{}, escapeHTML); err != nil {
-						return err
-					}
-				} else if err = decodeSlice(dec, []interface{}{}, escapeHTML); err != nil {
+				if err := handleSliceNestedArray(dec, s, index, escapeHTML); err != nil {
 					return err
 				}
 			case ']':
@@ -256,6 +248,54 @@ func decodeSlice(dec *json.Decoder, s []interface{}, escapeHTML bool) error {
 			}
 		}
 	}
+}
+
+// handleSliceNestedObject handles decoding a nested object in a slice.
+func handleSliceNestedObject(dec *json.Decoder, s []interface{}, index int, escapeHTML bool) error {
+	if index >= len(s) {
+		return decodeOrderedMap(dec, &OrderedMap{})
+	}
+
+	if values, ok := s[index].(map[string]interface{}); ok {
+		newMap := OrderedMap{
+			keys:       make([]string, 0, len(values)),
+			values:     values,
+			escapeHTML: escapeHTML,
+		}
+		if err := decodeOrderedMap(dec, &newMap); err != nil {
+			return err
+		}
+		s[index] = newMap
+		return nil
+	}
+
+	if oldMap, ok := s[index].(OrderedMap); ok {
+		newMap := OrderedMap{
+			keys:       make([]string, 0, len(oldMap.values)),
+			values:     oldMap.values,
+			escapeHTML: escapeHTML,
+		}
+		if err := decodeOrderedMap(dec, &newMap); err != nil {
+			return err
+		}
+		s[index] = newMap
+		return nil
+	}
+
+	return decodeOrderedMap(dec, &OrderedMap{})
+}
+
+// handleSliceNestedArray handles decoding a nested array in a slice.
+func handleSliceNestedArray(dec *json.Decoder, s []interface{}, index int, escapeHTML bool) error {
+	if index >= len(s) {
+		return decodeSlice(dec, []interface{}{}, escapeHTML)
+	}
+
+	if values, ok := s[index].([]interface{}); ok {
+		return decodeSlice(dec, values, escapeHTML)
+	}
+
+	return decodeSlice(dec, []interface{}{}, escapeHTML)
 }
 
 // MarshalJSON implements json.Marshaler while preserving key order
