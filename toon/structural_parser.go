@@ -295,77 +295,116 @@ func (sp *structuralParser) expandDottedKey(path string, value Value, target map
 	}
 
 	// Handle path ending with '.' (e.g., "data.") to create empty array
-	if parts[len(parts)-1] == "" {
-		// Remove trailing empty part
-		parts = parts[:len(parts)-1]
-		if len(parts) == 0 {
-			return &DecodeError{Message: "invalid path with only dot"}
-		}
-		// Set empty array as value
-		value = []interface{}{}
+	parts, value = handleTrailingDotInPath(parts, value)
+
+	// Check again after handling trailing dot
+	if len(parts) == 0 {
+		return &DecodeError{Message: "invalid path with only dot"}
 	}
 
 	// Single part - direct assignment
 	if len(parts) == 1 {
-		key := parts[0]
-		// Handle empty nested object case (e.g., "a.b:")
-		if key == "" && value == nil {
-			return nil
-		}
-		// Check for conflict in strict mode
-		if sp.opts.Strict {
-			if existing, exists := target[key]; exists {
-				// Check type compatibility - primitive vs object/array conflict
-				existingType := getValueType(existing)
-				newType := getValueType(value)
-				// Conflict if trying to assign different non-null types
-				if existingType != newType && existingType != "null" && newType != "null" {
-					return &DecodeError{
-						Message: fmt.Sprintf("path expansion conflict: key %q already exists with type %s, cannot assign type %s", key, existingType, newType),
-					}
-				}
-			}
-		}
-		target[key] = value
-		return nil
+		return sp.handleDirectKeyAssignment(parts[0], value, target)
 	}
 
 	// Multi-part path - recursive expansion
+	return sp.expandMultiPartPath(parts, value, target)
+}
+
+// handleTrailingDotInPath processes paths ending with '.' to create empty arrays.
+func handleTrailingDotInPath(parts []string, value Value) ([]string, Value) {
+	if parts[len(parts)-1] == "" {
+		parts = parts[:len(parts)-1]
+		if len(parts) == 0 {
+			// This will be caught as error in caller
+			return parts, value
+		}
+		value = []interface{}{}
+	}
+	return parts, value
+}
+
+// handleDirectKeyAssignment handles single-part path direct assignment.
+func (sp *structuralParser) handleDirectKeyAssignment(key string, value Value, target map[string]Value) error {
+	// Handle empty nested object case
+	if key == "" && value == nil {
+		return nil
+	}
+
+	// Check for conflict in strict mode
+	if sp.opts.Strict {
+		if err := checkKeyAssignmentConflict(target, key, value); err != nil {
+			return err
+		}
+	}
+
+	target[key] = value
+	return nil
+}
+
+// checkKeyAssignmentConflict checks for type conflicts in strict mode.
+func checkKeyAssignmentConflict(target map[string]Value, key string, value Value) error {
+	existing, exists := target[key]
+	if !exists {
+		return nil
+	}
+
+	existingType := getValueType(existing)
+	newType := getValueType(value)
+
+	// Conflict if trying to assign different non-null types
+	if existingType != newType && existingType != "null" && newType != "null" {
+		return &DecodeError{
+			Message: fmt.Sprintf("path expansion conflict: key %q already exists with type %s, cannot assign type %s", key, existingType, newType),
+		}
+	}
+	return nil
+}
+
+// expandMultiPartPath handles recursive expansion for multi-part paths.
+func (sp *structuralParser) expandMultiPartPath(parts []string, value Value, target map[string]Value) error {
 	firstKey := parts[0]
 	remainingPath := strings.Join(parts[1:], ".")
 
-	// Handle empty key segment
 	if firstKey == "" {
 		return &DecodeError{Message: "empty key segment in path"}
 	}
 
-	// Get or create intermediate map
-	existing, exists := target[firstKey]
+	nestedMap, err := sp.getOrCreateNestedMap(target, firstKey)
+	if err != nil {
+		return err
+	}
+
+	return sp.expandDottedKey(remainingPath, value, nestedMap)
+}
+
+// getOrCreateNestedMap gets an existing nested map or creates one.
+func (sp *structuralParser) getOrCreateNestedMap(target map[string]Value, key string) (map[string]Value, error) {
+	existing, exists := target[key]
 	if !exists {
-		// Create new nested map
 		nested := make(map[string]Value)
-		target[firstKey] = nested
-		return sp.expandDottedKey(remainingPath, value, nested)
+		target[key] = nested
+		return nested, nil
 	}
 
 	// Existing value - check compatibility
 	nestedMap, isMap := existing.(map[string]Value)
-	if !isMap {
-		// Conflict: existing value is not a map
-		if sp.opts.Strict {
-			existingType := getValueType(existing)
-			return &DecodeError{
-				Message: fmt.Sprintf("path expansion conflict: key %q has type %s, cannot expand as object", firstKey, existingType),
-			}
-		}
-		// Non-strict: overwrite with new nested structure (LWW)
-		nested := make(map[string]Value)
-		target[firstKey] = nested
-		return sp.expandDottedKey(remainingPath, value, nested)
+	if isMap {
+		return nestedMap, nil
 	}
 
-	// Recurse into existing map
-	return sp.expandDottedKey(remainingPath, value, nestedMap)
+	// Conflict: existing value is not a map
+	if sp.opts.Strict {
+		existingType := getValueType(existing)
+		return nil, &DecodeError{
+			Message: fmt.Sprintf("path expansion conflict: key %q has type %s, cannot expand as object", key, existingType),
+		}
+	}
+
+	// Non-strict: overwrite with new nested structure (LWW)
+	nested := make(map[string]Value)
+	target[key] = nested
+	return nested, nil
 }
 
 // getValueType returns a string describing the type of a value for error messages

@@ -76,85 +76,13 @@ func flattenObject(obj map[string]Value, currentPath string, depth int, opts *En
 	result := make(map[string]Value)
 
 	// First pass: check if any potential flattened paths would collide with literal keys
-	// This implements "safe mode" collision detection
 	literalKeys := make(map[string]bool)
-
-	// Collect all literal keys at the current level
 	for key := range obj {
 		literalKeys[key] = true
 	}
 
-	// Check for collisions: if any potential flattened path matches a literal key, don't flatten that branch
-	hasCollision := false
-	for key, value := range obj {
-		if isMap(value) {
-			var nestedMap map[string]Value
-			if orderedMap, ok := value.(OrderedMap); ok {
-				nestedMap = make(map[string]Value)
-				for k, v := range orderedMap.Values() {
-					nestedMap[k] = v
-				}
-			} else if orderedMapPtr, ok := value.(*OrderedMap); ok {
-				nestedMap = make(map[string]Value)
-				for k, v := range orderedMapPtr.Values() {
-					nestedMap[k] = v
-				}
-			} else if m, ok := value.(map[string]Value); ok {
-				nestedMap = m
-			}
-			if nestedMap != nil {
-				// Collect potential paths from this nested structure
-				tempPaths := make(map[string]bool)
-				var collectTemp func(m map[string]Value, prefix string)
-				collectTemp = func(m map[string]Value, prefix string) {
-					for k, v := range m {
-						var path string
-						if prefix == "" {
-							path = k
-						} else {
-							path = prefix + "." + k
-						}
-						tempPaths[path] = true
-						if isMap(v) {
-							var nm map[string]Value
-							if om, ok := v.(OrderedMap); ok {
-								nm = make(map[string]Value)
-								for k2, v2 := range om.Values() {
-									nm[k2] = v2
-								}
-							} else if omp, ok := v.(*OrderedMap); ok {
-								nm = make(map[string]Value)
-								for k2, v2 := range omp.Values() {
-									nm[k2] = v2
-								}
-							} else if m2, ok := v.(map[string]Value); ok {
-								nm = m2
-							}
-							if nm != nil {
-								collectTemp(nm, path)
-							}
-						}
-					}
-				}
-				collectTemp(nestedMap, key)
-
-				// Check if any of these paths collide with literal keys
-				for path := range tempPaths {
-					if literalKeys[path] {
-						hasCollision = true
-						break
-					}
-				}
-			}
-		}
-		if hasCollision {
-			break
-		}
-	}
-
-	// If there's a collision, don't flatten at all
-	// In strict mode, return an error; otherwise return original structure
-	if hasCollision {
+	// Check for collisions and handle accordingly
+	if hasCollision := checkFlattenCollisions(obj, literalKeys); hasCollision {
 		if opts.Strict {
 			return nil, &EncodeError{
 				Message: "key collision: flattened path would conflict with existing literal key",
@@ -164,118 +92,17 @@ func flattenObject(obj map[string]Value, currentPath string, depth int, opts *En
 		return obj, nil
 	}
 
-	// Helper to check if a nested structure contains any keys that need quoting
-	// In safe mode, a key needs quoting if it's not a "safe key" (can't be used unquoted)
-	var containsQuotedKeys func(m map[string]Value) bool
-	containsQuotedKeys = func(m map[string]Value) bool {
-		for k, v := range m {
-			if !safeKey(k) {
-				return true
-			}
-			if isMap(v) {
-				var nm map[string]Value
-				if om, ok := v.(OrderedMap); ok {
-					nm = make(map[string]Value)
-					for k2, v2 := range om.Values() {
-						nm[k2] = v2
-					}
-				} else if omp, ok := v.(*OrderedMap); ok {
-					nm = make(map[string]Value)
-					for k2, v2 := range omp.Values() {
-						nm[k2] = v2
-					}
-				} else if m2, ok := v.(map[string]Value); ok {
-					nm = m2
-				}
-				if nm != nil && containsQuotedKeys(nm) {
-					return true
-				}
-			}
-		}
-		return false
-	}
-
 	for key, value := range obj {
-		// Skip flattening if key is not safe for use in dotted paths (would need quoting)
-		isKeySafe := safeKey(key)
+		fullPath := buildFullPath(currentPath, key)
+		segmentCount := countPathSegments(currentPath)
 
-		// Build the full path
-		var fullPath string
-		if currentPath == "" {
-			fullPath = key
-		} else {
-			fullPath = currentPath + "." + key
-		}
-
-		// Check if we should continue flattening
-		// FlattenDepth limits the number of segments in the resulting dotted key
-		// Count current segments in fullPath
-		segmentCount := 1 // At least one segment (the current key)
-		if currentPath != "" {
-			segmentCount = len(strings.Split(currentPath, ".")) + 1
-		}
-
-		shouldFlatten := isMap(value) &&
-			isKeySafe &&
-			opts.FlattenDepth > 0 &&
-			segmentCount < opts.FlattenDepth
-
-		// Additionally, check if the nested structure contains any keys that need quoting
-		// If so, don't flatten this branch at all
-		if shouldFlatten && isMap(value) {
-			var nestedMap map[string]Value
-			if orderedMap, ok := value.(OrderedMap); ok {
-				nestedMap = make(map[string]Value)
-				for k, v := range orderedMap.Values() {
-					nestedMap[k] = v
-				}
-			} else if orderedMapPtr, ok := value.(*OrderedMap); ok {
-				nestedMap = make(map[string]Value)
-				for k, v := range orderedMapPtr.Values() {
-					nestedMap[k] = v
-				}
-			} else if m, ok := value.(map[string]Value); ok {
-				nestedMap = m
-			}
-			if nestedMap != nil && containsQuotedKeys(nestedMap) {
-				shouldFlatten = false
-			}
-		}
-
-		if shouldFlatten {
-			// Check for empty nested map
-			var isEmpty bool
-			var nestedMap map[string]Value
-
-			if orderedMap, ok := value.(OrderedMap); ok {
-				isEmpty = orderedMap.Len() == 0
-				nestedMap = make(map[string]Value)
-				for k, v := range orderedMap.Values() {
-					nestedMap[k] = v
-				}
-			} else if orderedMapPtr, ok := value.(*OrderedMap); ok {
-				isEmpty = orderedMapPtr.Len() == 0
-				nestedMap = make(map[string]Value)
-				for k, v := range orderedMapPtr.Values() {
-					nestedMap[k] = v
-				}
-			} else {
-				rv := reflect.ValueOf(value)
-				isEmpty = rv.Len() == 0
-				nestedMap = value.(map[string]Value)
-			}
-
+		if shouldFlatten := shouldFlattenValue(value, key, segmentCount, opts); shouldFlatten {
+			isEmpty, nestedMap := isEmptyNestedMap(value)
 			if isEmpty {
 				// Empty object - add at current path
-				if existing, exists := result[fullPath]; exists {
-					if opts.Strict {
-						return nil, &EncodeError{
-							Message: fmt.Sprintf("key collision: %q", fullPath),
-							Value:   existing,
-						}
-					}
+				if err := addToResultWithCollisionCheck(result, fullPath, value, opts); err != nil {
+					return nil, err
 				}
-				result[fullPath] = value
 				continue
 			}
 
@@ -286,32 +113,168 @@ func flattenObject(obj map[string]Value, currentPath string, depth int, opts *En
 			}
 			// Merge nested results
 			for k, v := range nested {
-				if existing, exists := result[k]; exists {
-					if opts.Strict {
-						return nil, &EncodeError{
-							Message: fmt.Sprintf("key collision: %q", k),
-							Value:   existing,
-						}
-					}
-					// Non-strict: last value wins
+				if err := addToResultWithCollisionCheck(result, k, v, opts); err != nil {
+					return nil, err
 				}
-				result[k] = v
 			}
 		} else {
 			// Stop flattening - add the value at current path
-			// The value should remain nested (not be flattened further)
-			if existing, exists := result[fullPath]; exists {
-				if opts.Strict {
-					return nil, &EncodeError{
-						Message: fmt.Sprintf("key collision: %q", fullPath),
-						Value:   existing,
-					}
-				}
-				// Non-strict: last value wins
+			if err := addToResultWithCollisionCheck(result, fullPath, value, opts); err != nil {
+				return nil, err
 			}
-			result[fullPath] = value
 		}
 	}
 
 	return result, nil
+}
+
+// convertToNestedMap converts various map types to map[string]Value.
+func convertToNestedMap(value Value) (map[string]Value, bool) {
+	if orderedMap, ok := value.(OrderedMap); ok {
+		nestedMap := make(map[string]Value)
+		for k, v := range orderedMap.Values() {
+			nestedMap[k] = v
+		}
+		return nestedMap, true
+	}
+	if orderedMapPtr, ok := value.(*OrderedMap); ok {
+		nestedMap := make(map[string]Value)
+		for k, v := range orderedMapPtr.Values() {
+			nestedMap[k] = v
+		}
+		return nestedMap, true
+	}
+	if m, ok := value.(map[string]Value); ok {
+		return m, true
+	}
+	return nil, false
+}
+
+// collectPotentialPaths recursively collects potential flattened paths from a nested map.
+func collectPotentialPaths(m map[string]Value, prefix string, paths map[string]bool) {
+	for k, v := range m {
+		var path string
+		if prefix == "" {
+			path = k
+		} else {
+			path = prefix + "." + k
+		}
+		paths[path] = true
+		if isMap(v) {
+			if nm, ok := convertToNestedMap(v); ok {
+				collectPotentialPaths(nm, path, paths)
+			}
+		}
+	}
+}
+
+// checkFlattenCollisions checks if any potential flattened paths would collide with literal keys.
+func checkFlattenCollisions(obj map[string]Value, literalKeys map[string]bool) bool {
+	for key, value := range obj {
+		if !isMap(value) {
+			continue
+		}
+		nestedMap, ok := convertToNestedMap(value)
+		if !ok {
+			continue
+		}
+		// Collect potential paths from this nested structure
+		tempPaths := make(map[string]bool)
+		collectPotentialPaths(nestedMap, key, tempPaths)
+
+		// Check if any of these paths collide with literal keys
+		for path := range tempPaths {
+			if literalKeys[path] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// containsQuotedKeys checks if a nested structure contains any keys that need quoting.
+func containsQuotedKeys(m map[string]Value) bool {
+	for k, v := range m {
+		if !safeKey(k) {
+			return true
+		}
+		if isMap(v) {
+			if nm, ok := convertToNestedMap(v); ok && containsQuotedKeys(nm) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// countPathSegments counts the number of segments in a path.
+func countPathSegments(currentPath string) int {
+	if currentPath == "" {
+		return 1
+	}
+	return len(strings.Split(currentPath, ".")) + 1
+}
+
+// buildFullPath builds the full path from current path and key.
+func buildFullPath(currentPath, key string) string {
+	if currentPath == "" {
+		return key
+	}
+	return currentPath + "." + key
+}
+
+// shouldFlattenValue determines if a value should be flattened.
+func shouldFlattenValue(value Value, key string, segmentCount int, opts *EncodeOptions) bool {
+	if !isMap(value) {
+		return false
+	}
+	if !safeKey(key) {
+		return false
+	}
+	if opts.FlattenDepth <= 0 || segmentCount >= opts.FlattenDepth {
+		return false
+	}
+	// Check if the nested structure contains any keys that need quoting
+	nestedMap, ok := convertToNestedMap(value)
+	if !ok {
+		return false
+	}
+	return !containsQuotedKeys(nestedMap)
+}
+
+// addToResultWithCollisionCheck adds a value to result with collision checking.
+func addToResultWithCollisionCheck(result map[string]Value, fullPath string, value Value, opts *EncodeOptions) error {
+	if existing, exists := result[fullPath]; exists {
+		if opts.Strict {
+			return &EncodeError{
+				Message: fmt.Sprintf("key collision: %q", fullPath),
+				Value:   existing,
+			}
+		}
+		// Non-strict: last value wins
+	}
+	result[fullPath] = value
+	return nil
+}
+
+// isEmptyNestedMap checks if a nested map is empty.
+func isEmptyNestedMap(value Value) (bool, map[string]Value) {
+	if orderedMap, ok := value.(OrderedMap); ok {
+		nestedMap := make(map[string]Value)
+		for k, v := range orderedMap.Values() {
+			nestedMap[k] = v
+		}
+		return orderedMap.Len() == 0, nestedMap
+	}
+	if orderedMapPtr, ok := value.(*OrderedMap); ok {
+		nestedMap := make(map[string]Value)
+		for k, v := range orderedMapPtr.Values() {
+			nestedMap[k] = v
+		}
+		return orderedMapPtr.Len() == 0, nestedMap
+	}
+	rv := reflect.ValueOf(value)
+	isEmpty := rv.Len() == 0
+	nestedMap := value.(map[string]Value)
+	return isEmpty, nestedMap
 }

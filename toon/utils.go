@@ -362,40 +362,40 @@ func toFloat64(v Value) (float64, bool) {
 // toInt64 converts a numeric value to int64.
 func toInt64(v Value) (int64, bool) {
 	switch val := v.(type) {
-	case int:
-		return int64(val), true
-	case int8:
-		return int64(val), true
-	case int16:
-		return int64(val), true
-	case int32:
-		return int64(val), true
-	case int64:
-		return val, true
-	case uint:
-		return int64(val), true
-	case uint8:
-		return int64(val), true
-	case uint16:
-		return int64(val), true
-	case uint32:
-		return int64(val), true
-	case uint64:
-		if val <= math.MaxInt64 {
-			return int64(val), true
-		}
-		return 0, false
-	case float32:
-		if val == float32(int64(val)) {
-			return int64(val), true
-		}
-		return 0, false
-	case float64:
-		if val == float64(int64(val)) {
-			return int64(val), true
-		}
-		return 0, false
+	case int, int8, int16, int32, int64:
+		return toInt64FromSigned(val), true
+	case uint, uint8, uint16, uint32, uint64:
+		return toInt64FromUnsigned(val)
+	case float32, float64:
+		return toInt64FromFloat(val)
 	default:
 		return 0, false
 	}
+}
+
+// toInt64FromSigned converts signed integers to int64.
+func toInt64FromSigned(v Value) int64 {
+	rv := reflect.ValueOf(v)
+	return rv.Int()
+}
+
+// toInt64FromUnsigned converts unsigned integers to int64.
+func toInt64FromUnsigned(v Value) (int64, bool) {
+	rv := reflect.ValueOf(v)
+	uval := rv.Uint()
+	if uval <= math.MaxInt64 {
+		return int64(uval), true
+	}
+	return 0, false
+}
+
+// toInt64FromFloat converts floats to int64 if they are whole numbers.
+func toInt64FromFloat(v Value) (int64, bool) {
+	rv := reflect.ValueOf(v)
+	fval := rv.Float()
+	ival := int64(fval)
+	if fval == float64(ival) {
+		return ival, true
+	}
+	return 0, false
 }
