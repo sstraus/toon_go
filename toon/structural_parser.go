@@ -1827,62 +1827,113 @@ func (sp *structuralParser) parseHeader(header string, delimiter string) []strin
 func (sp *structuralParser) parseTabularRows(baseIndent int, lengthStr string, delimiter string, keys []string) ([]Value, error) {
 	result := make([]Value, 0)
 	rowCount := 0
+
 	for sp.pos < len(sp.lines) {
 		line := sp.lines[sp.pos]
+
+		// Handle blank lines
 		if line.isBlank {
-			if sp.opts.Strict {
-				return nil, &DecodeError{
-					Message: "blank line not allowed within tabular array in strict mode",
-					Line:    line.lineNumber,
-					Context: line.original,
-				}
+			if err := sp.handleBlankLineInTabular(line); err != nil {
+				return nil, err
 			}
 			sp.pos++
 			continue
 		}
+
+		// Check indent level
 		if line.indent <= baseIndent {
 			break
 		}
-		parts := sp.splitRowByDelimiter(line.content, delimiter)
-		if sp.opts.Strict && len(parts) != len(keys) {
-			return nil, &DecodeError{
-				Message: fmt.Sprintf("tabular array row has wrong number of values: expected %d, got %d", len(keys), len(parts)),
-				Line:    line.lineNumber,
-				Context: line.original,
-			}
+
+		// Parse and add row
+		row, err := sp.parseTabularRow(line, delimiter, keys)
+		if err != nil {
+			return nil, err
 		}
-		row := make(map[string]Value)
-		for i, k := range keys {
-			if i < len(parts) {
-				v, err := parseValue(strings.TrimSpace(parts[i]))
-				if err != nil {
-					return nil, err
-				}
-				row[k] = v
-			}
-		}
+
 		result = append(result, row)
 		rowCount++
 		sp.pos++
 	}
-	// validate length
-	if sp.opts.Strict && lengthStr != "" {
-		numStr := ""
-		for _, ch := range lengthStr {
-			if ch >= '0' && ch <= '9' {
-				numStr += string(ch)
-			}
-		}
-		if numStr != "" {
-			expected, _ := strconv.Atoi(numStr)
-			if rowCount != expected {
-				return nil, &DecodeError{
-					Message: fmt.Sprintf("tabular array length mismatch: expected %d rows, got %d", expected, rowCount),
-				}
-			}
+
+	// Validate array length
+	if err := sp.validateTabularArrayLength(lengthStr, rowCount); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// handleBlankLineInTabular handles blank lines in tabular arrays.
+func (sp *structuralParser) handleBlankLineInTabular(line lineInfo) error {
+	if sp.opts.Strict {
+		return &DecodeError{
+			Message: "blank line not allowed within tabular array in strict mode",
+			Line:    line.lineNumber,
+			Context: line.original,
 		}
 	}
-	return result, nil
+	return nil
+}
+
+// parseTabularRow parses a single row of a tabular array.
+func (sp *structuralParser) parseTabularRow(line lineInfo, delimiter string, keys []string) (map[string]Value, error) {
+	parts := sp.splitRowByDelimiter(line.content, delimiter)
+
+	// Validate column count in strict mode
+	if sp.opts.Strict && len(parts) != len(keys) {
+		return nil, &DecodeError{
+			Message: fmt.Sprintf("tabular array row has wrong number of values: expected %d, got %d", len(keys), len(parts)),
+			Line:    line.lineNumber,
+			Context: line.original,
+		}
+	}
+
+	// Build row map
+	row := make(map[string]Value)
+	for i, k := range keys {
+		if i < len(parts) {
+			v, err := parseValue(strings.TrimSpace(parts[i]))
+			if err != nil {
+				return nil, err
+			}
+			row[k] = v
+		}
+	}
+
+	return row, nil
+}
+
+// validateTabularArrayLength validates the array length matches expected.
+func (sp *structuralParser) validateTabularArrayLength(lengthStr string, rowCount int) error {
+	if !sp.opts.Strict || lengthStr == "" {
+		return nil
+	}
+
+	numStr := extractNumericLength(lengthStr)
+	if numStr == "" {
+		return nil
+	}
+
+	expected, _ := strconv.Atoi(numStr)
+	if rowCount != expected {
+		return &DecodeError{
+			Message: fmt.Sprintf("tabular array length mismatch: expected %d rows, got %d", expected, rowCount),
+		}
+	}
+
+	return nil
+}
+
+// extractNumericLength extracts numeric characters from a length string.
+func extractNumericLength(lengthStr string) string {
+	numStr := ""
+	for _, ch := range lengthStr {
+		if ch >= '0' && ch <= '9' {
+			numStr += string(ch)
+		}
+	}
+	return numStr
 }
 
 func parseArrayHeader(key string) (lengthStr string, delimiter string, isTabular bool, header string, err error) {
