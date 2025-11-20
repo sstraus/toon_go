@@ -241,25 +241,12 @@ func validateAndUnescape(s string) (string, error) {
 			if i+1 >= len(s) {
 				return "", &DecodeError{Message: "unterminated string: unexpected end in escape sequence"}
 			}
-			next := s[i+1]
-			switch next {
-			case '\\', '"', 'n', 'r', 't':
-				// Valid escape sequence
-				if next == '\\' {
-					result.WriteByte('\\')
-				} else if next == '"' {
-					result.WriteByte('"')
-				} else if next == 'n' {
-					result.WriteByte('\n')
-				} else if next == 'r' {
-					result.WriteByte('\r')
-				} else if next == 't' {
-					result.WriteByte('\t')
-				}
-				i += 2
-			default:
-				return "", &DecodeError{Message: fmt.Sprintf("invalid escape sequence: \\%c", next)}
+			char, err := unescapeChar(s[i+1])
+			if err != nil {
+				return "", err
 			}
+			result.WriteByte(char)
+			i += 2
 		} else {
 			result.WriteByte(s[i])
 			i++
@@ -267,16 +254,39 @@ func validateAndUnescape(s string) (string, error) {
 	}
 
 	// Check for odd number of trailing backslashes (unterminated)
-	// This shouldn't happen if we've processed correctly, but validate
+	if err := validateTrailingBackslashes(s); err != nil {
+		return "", err
+	}
+
+	return result.String(), nil
+}
+
+// unescapeChar converts an escape character to its actual byte value.
+func unescapeChar(c byte) (byte, error) {
+	escapeMap := map[byte]byte{
+		'\\': '\\',
+		'"':  '"',
+		'n':  '\n',
+		'r':  '\r',
+		't':  '\t',
+	}
+
+	if unescaped, ok := escapeMap[c]; ok {
+		return unescaped, nil
+	}
+	return 0, &DecodeError{Message: fmt.Sprintf("invalid escape sequence: \\%c", c)}
+}
+
+// validateTrailingBackslashes checks for odd number of trailing backslashes.
+func validateTrailingBackslashes(s string) error {
 	trailingBackslashes := 0
 	for j := len(s) - 1; j >= 0 && s[j] == '\\'; j-- {
 		trailingBackslashes++
 	}
 	if trailingBackslashes%2 == 1 {
-		return "", &DecodeError{Message: "unterminated string: odd number of trailing backslashes"}
+		return &DecodeError{Message: "unterminated string: odd number of trailing backslashes"}
 	}
-
-	return result.String(), nil
+	return nil
 }
 
 // parseValue parses a primitive value from a string.
