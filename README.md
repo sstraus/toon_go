@@ -88,13 +88,23 @@ func main() {
         "age":  30,
     }
 
+    // Using io.Writer
     var buf bytes.Buffer
-    err := toon.Marshal(data, &buf, nil)
+    err := toon.Marshal(data, &buf)
     if err != nil {
         panic(err)
     }
-
     fmt.Println(buf.String())
+    // Output:
+    // age: 30
+    // name: Alice
+
+    // Or use string convenience function
+    result, err := toon.MarshalToString(data)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(result)
     // Output:
     // age: 30
     // name: Alice
@@ -103,13 +113,21 @@ func main() {
     input := `name: Bob
 age: 25`
 
-    var result map[string]interface{}
-    err = toon.Unmarshal(strings.NewReader(input), &result, nil)
+    var decoded map[string]interface{}
+    err = toon.Unmarshal(strings.NewReader(input), &decoded)
     if err != nil {
         panic(err)
     }
+    fmt.Printf("%+v\n", decoded)
+    // Output: map[age:25 name:Bob]
 
-    fmt.Printf("%+v\n", result)
+    // Or use string convenience function
+    var decoded2 map[string]interface{}
+    err = toon.UnmarshalFromString(input, &decoded2)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("%+v\n", decoded2)
     // Output: map[age:25 name:Bob]
 }
 ```
@@ -122,9 +140,8 @@ data := map[string]interface{}{
     "tags": []interface{}{"go", "toon", "llm"},
 }
 
-var buf bytes.Buffer
-toon.Marshal(data, &buf, nil)
-fmt.Println(buf.String())
+result, _ := toon.MarshalToString(data)
+fmt.Println(result)
 // Output: tags[3]: go,toon,llm
 
 // Tabular array (uniform objects)
@@ -135,32 +152,55 @@ users := map[string]interface{}{
     },
 }
 
-buf.Reset()
-toon.Marshal(users, &buf, nil)
-fmt.Println(buf.String())
+result, _ = toon.MarshalToString(users)
+fmt.Println(result)
 // Output:
 // users[2]{age,name}:
 //   30,Alice
 //   25,Bob
 ```
 
-### Custom Options
+### Functional Options
+
+TOON Go uses the functional options pattern for clean, flexible configuration:
 
 ```go
-opts := &toon.EncodeOptions{
-    Indent:       4,           // 4 spaces instead of 2
-    Delimiter:    "\t",        // Tab delimiter
-    LengthMarker: "#",         // Prefix length with #
-}
-
+// Encoding with multiple options
 data := map[string]interface{}{
     "values": []interface{}{1, 2, 3},
 }
 
-var buf bytes.Buffer
-toon.Marshal(data, &buf, opts)
-fmt.Println(buf.String())
+result, _ := toon.MarshalToString(data,
+    toon.WithIndent(4),           // 4 spaces instead of 2
+    toon.WithDelimiter("\t"),     // Tab delimiter
+    toon.WithLengthMarker("#"),   // Prefix length with #
+)
+fmt.Println(result)
 // Output: values[#3	]: 1	2	3
+
+// Decoding with options
+input := "name: Alice\nage: 30"
+var result map[string]interface{}
+
+err := toon.UnmarshalFromString(input, &result,
+    toon.WithStrictDecoding(false),  // Disable strict mode
+    toon.WithExpandPaths("safe"),    // Expand dotted keys
+)
+```
+
+**Available Encoding Options:**
+- `WithIndent(n)` - Set indentation size
+- `WithDelimiter(s)` - Set array delimiter ("," | "\t" | "|")
+- `WithLengthMarker(s)` - Set length marker prefix
+- `WithFlattenPaths(bool)` - Enable path flattening
+- `WithFlattenDepth(n)` - Limit flattening depth
+- `WithStrict(bool)` - Enable strict collision detection
+
+**Available Decoding Options:**
+- `WithStrictDecoding(bool)` - Enable strict validation
+- `WithIndentSize(n)` - Expected indent size
+- `WithExpandPaths(mode)` - Expand dotted keys ("off" | "safe")
+- `WithKeyMode(mode)` - Key decoding mode
 ```
 
 ## Project Structure
