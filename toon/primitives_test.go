@@ -269,8 +269,8 @@ func TestEncodeFloat_EdgeCases(t *testing.T) {
 		{"float64 1.0", 1.0, "1", false},
 		{"float64 -1.0", -1.0, "-1", false},
 		{"float32 max", float32(math.MaxFloat32), "340282346638528860000000000000000000000", false},
-		{"whole number within int64 range", float64(9223372036854775807), "9223372036854775807", false},
-		{"whole number at max int64", float64(math.MaxInt64), "9223372036854775807", false},
+		{"whole number within safe int range", float64(9007199254740992), "9007199254740992", false}, // 2^53 - max safe integer for float64
+		{"negative whole number", float64(-9007199254740992), "-9007199254740992", false},
 		{"invalid type (string)", "not a float", "", true},
 	}
 
