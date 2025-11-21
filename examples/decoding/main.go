@@ -89,7 +89,7 @@ ssl_enabled: true`
 value: 123
 
 
-extra_newlines: allowed`  // Extra blank lines
+extra_newlines: allowed` // Extra blank lines
 
 	var flexible map[string]interface{}
 	err = toon.UnmarshalFromString(input6, &flexible, toon.WithStrictDecoding(false))

@@ -161,10 +161,8 @@ func TestValidateEncodeOptions(t *testing.T) {
 						}
 					}
 				}
-			} else {
-				if err != nil {
-					t.Errorf("validateEncodeOptions() unexpected error = %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("validateEncodeOptions() unexpected error = %v", err)
 			}
 		})
 	}
@@ -312,10 +310,8 @@ func TestValidateDecodeOptions(t *testing.T) {
 						}
 					}
 				}
-			} else {
-				if err != nil {
-					t.Errorf("validateDecodeOptions() unexpected error = %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("validateDecodeOptions() unexpected error = %v", err)
 			}
 		})
 	}

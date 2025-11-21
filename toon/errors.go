@@ -41,11 +41,12 @@ func (e *DecodeError) Error() string {
 	msg := e.Message
 
 	if e.Line > 0 || e.Column > 0 {
-		if e.Line > 0 && e.Column > 0 {
+		switch {
+		case e.Line > 0 && e.Column > 0:
 			msg = fmt.Sprintf("%s at line %d, column %d", msg, e.Line, e.Column)
-		} else if e.Line > 0 {
+		case e.Line > 0:
 			msg = fmt.Sprintf("%s at line %d", msg, e.Line)
-		} else {
+		default:
 			msg = fmt.Sprintf("%s at column %d", msg, e.Column)
 		}
 	}

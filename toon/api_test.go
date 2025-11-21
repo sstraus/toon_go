@@ -171,7 +171,7 @@ func TestUnmarshalFromString(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple colons",
+			name:  "multiple colons",
 			input: "key: value: extra",
 			expected: map[string]interface{}{
 				"key": "value: extra",
@@ -396,4 +396,3 @@ func TestDecodeOptionsCoverage(t *testing.T) {
 		})
 	}
 }
-

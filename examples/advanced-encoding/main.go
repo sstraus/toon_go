@@ -115,10 +115,10 @@ func main() {
 				"replicas": 3,
 				"ports":    []interface{}{8080, 8443},
 				"env": map[string]interface{}{
-					"LOG_LEVEL":     "info",
-					"RATE_LIMIT":    "1000",
-					"TIMEOUT":       "30s",
-					"CORS_ORIGINS":  []interface{}{"https://app.example.com", "https://admin.example.com"},
+					"LOG_LEVEL":    "info",
+					"RATE_LIMIT":   "1000",
+					"TIMEOUT":      "30s",
+					"CORS_ORIGINS": []interface{}{"https://app.example.com", "https://admin.example.com"},
 				},
 			},
 			map[string]interface{}{

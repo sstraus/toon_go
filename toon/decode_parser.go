@@ -747,22 +747,23 @@ func skipToArrayBracket(p *parser) {
 func parseArrayLengthAndDelimiter(p *parser) (lengthStr, delimiter string) {
 	for p.peek() != ']' && !p.isEOF() {
 		ch := p.peek()
-		if ch >= '0' && ch <= '9' {
+		switch ch {
+		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 			lengthStr += string(ch)
 			p.advance()
-		} else if ch == '#' {
+		case '#':
 			// Length marker prefix
 			p.advance()
-		} else if ch == '\t' {
+		case '\t':
 			delimiter = "\t"
 			lengthStr += string(ch)
 			p.advance()
-		} else if ch == '|' {
+		case '|':
 			delimiter = "|"
 			lengthStr += string(ch)
 			p.advance()
-		} else {
-			break
+		default:
+			return lengthStr, delimiter
 		}
 	}
 	return lengthStr, delimiter
@@ -1164,7 +1165,7 @@ func (sp *structuralParser) handleBlankLineInListArray(line lineInfo, baseIndent
 }
 
 // parseListArrayItem parses a single item in a list array.
-func (sp *structuralParser) parseListArrayItem(line lineInfo, baseIndent int, delimiter string) (Value, error) {
+func (sp *structuralParser) parseListArrayItem(line lineInfo, _ int, delimiter string) (Value, error) {
 	content := strings.TrimSpace(strings.TrimPrefix(line.content, "-"))
 
 	// Empty item
@@ -1287,7 +1288,7 @@ func (sp *structuralParser) validateListArrayLength(lengthStr string, itemCount 
 }
 
 // parseListItem parses a single list item (which may be an object).
-func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, parentDelimiter string) (Value, error) {
+func (sp *structuralParser) parseListItem(lines []lineInfo, baseIndent int, _ string) (Value, error) {
 	if len(lines) == 0 {
 		return nil, &DecodeError{Message: "empty list item"}
 	}
@@ -1465,7 +1466,7 @@ func (sp *structuralParser) parseMultiLineListItem(content string, lines []lineI
 }
 
 // parseFirstLineOfListItem parses the first line and returns firstKey and start index.
-func (sp *structuralParser) parseFirstLineOfListItem(content string, lines []lineInfo, baseIndent int, result map[string]Value) (string, int) {
+func (sp *structuralParser) parseFirstLineOfListItem(content string, lines []lineInfo, _ int, result map[string]Value) (string, int) {
 	if !strings.Contains(content, ":") {
 		return "", 1
 	}
@@ -1479,7 +1480,11 @@ func (sp *structuralParser) parseFirstLineOfListItem(content string, lines []lin
 
 	// Handle keys with array notation
 	if strings.Contains(key, "[") && strings.Contains(key, "]") {
-		baseKey := key[:strings.Index(key, "[")]
+		pos := strings.Index(key, "[")
+		baseKey := key
+		if pos >= 0 {
+			baseKey = key[:pos]
+		}
 		if valueStr == "" {
 			if strings.HasSuffix(key, "[0]") {
 				result[baseKey] = []interface{}{}
@@ -1531,7 +1536,7 @@ func (sp *structuralParser) parseNestedUnderFirstKey(firstKey string, lines []li
 }
 
 // parseRemainingListItemLines parses the remaining lines of a list item.
-func (sp *structuralParser) parseRemainingListItemLines(lines []lineInfo, startIdx, baseIndent int, firstKey string, result map[string]Value) error {
+func (sp *structuralParser) parseRemainingListItemLines(lines []lineInfo, startIdx, _ int, firstKey string, result map[string]Value) error {
 	// Determine actual start index based on array notation check
 	i := determineStartIndex(lines, startIdx)
 
@@ -1890,21 +1895,22 @@ func parseLengthAndDelimiter(p *parser) (string, string) {
 	delimiter := ""
 	for p.peek() != ']' && !p.isEOF() {
 		ch := p.peek()
-		if ch >= '0' && ch <= '9' {
+		switch ch {
+		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 			lengthStr += string(ch)
 			p.advance()
-		} else if ch == '#' {
+		case '#':
 			p.advance()
-		} else if ch == '\t' {
+		case '\t':
 			delimiter = "\t"
 			lengthStr += "\t"
 			p.advance()
-		} else if ch == '|' {
+		case '|':
 			delimiter = "|"
 			lengthStr += "|"
 			p.advance()
-		} else {
-			break
+		default:
+			return lengthStr, delimiter
 		}
 	}
 	return lengthStr, delimiter
@@ -2055,11 +2061,12 @@ func parseArrayHeader(key string) (lengthStr string, delimiter string, isTabular
 	}
 	closePos += lastOpen
 	lengthStr = key[lastOpen+1 : closePos]
-	if strings.Contains(lengthStr, "\t") {
+	switch {
+	case strings.Contains(lengthStr, "\t"):
 		delimiter = "\t"
-	} else if strings.Contains(lengthStr, "|") {
+	case strings.Contains(lengthStr, "|"):
 		delimiter = "|"
-	} else {
+	default:
 		delimiter = ""
 	}
 	pos := closePos + 1

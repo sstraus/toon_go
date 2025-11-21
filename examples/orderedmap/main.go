@@ -155,10 +155,10 @@ func main() {
 
 	// Regular map (alphabetically sorted)
 	regularMap := map[string]interface{}{
-		"zebra":    "z",
-		"apple":    "a",
-		"mango":    "m",
-		"banana":   "b",
+		"zebra":  "z",
+		"apple":  "a",
+		"mango":  "m",
+		"banana": "b",
 	}
 	regular, _ := toon.MarshalToString(regularMap)
 	fmt.Println("  Regular map (alphabetical):")

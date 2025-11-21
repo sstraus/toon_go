@@ -2,6 +2,7 @@
 .roo
 .roomodes
 .serena
+.act/
 .vscode/
 .idea/
 *.swp
@@ -34,3 +35,5 @@ vendor/
 # Go workspace file (local development only)
 go.work
 go.work.sum
+scripts
+.actrc

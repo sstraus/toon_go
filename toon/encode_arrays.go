@@ -269,7 +269,7 @@ func encodeListArray(w *writer, key string, v Value, depth int, opts *EncodeOpti
 }
 
 // encodeListItem encodes a single item in a list array.
-func encodeListItem(w *writer, item Value, depth int, opts *EncodeOptions, isFirst bool) error {
+func encodeListItem(w *writer, item Value, depth int, opts *EncodeOptions, _ bool) error {
 	if isPrimitive(item) {
 		return encodeListItemPrimitive(w, item, depth, opts)
 	}
